@@ -70,14 +70,17 @@
         "sites_rewritten": 170,
         "sites_left_explicit": 4,
         "local_gates_passed": [
-          "cargo fmt --check",
-          "tests/ghostty_cfg_policy.rs (compiled standalone with rustc --test, run against the real source tree, plus a negative control that fails as expected)"
+          "cargo fmt --check: clean",
+          "cargo check -p paneflow-app --all-targets: 0 errors",
+          "cargo clippy --workspace --all-targets --locked -- -D warnings: 0 errors",
+          "cargo test --workspace --locked: 1811 passed, 2 ignored, 25 suites",
+          "cargo test -p paneflow-app --test ghostty_cfg_policy: 2 passed, plus a standalone negative control (rustc --test against a tree containing the forbidden motif) that fails as expected"
         ],
         "local_gates_blocked": [
-          "cargo check / clippy / test -p paneflow-app: the dev machine has Command Line Tools only, so gpui_macos cannot compile its Metal shaders (xcrun: unable to find utility \"metal\"). Requires full Xcode.",
-          "QG-002 Linux and Windows neutrality: cannot be produced locally, needs the CI matrix on the candidate commit."
+          "QG-002 Linux and Windows neutrality: cannot be produced on an Apple Silicon dev machine, needs the CI matrix on the candidate commit."
         ],
-        "note": "Le refactor est textuellement complet et prouvé par inventaire avant/après, mais aucun des trois arms n'a été compilé localement. US-001 ne peut pas passer DONE avant QG-001 sur macOS et QG-002 sur Linux/Windows."
+        "environment_note": "Building paneflow-app on macOS requires full Xcode, not Command Line Tools: gpui_macos compiles src/shaders.metal in its build script via `xcrun metal`, and on Xcode 26+ the Metal toolchain is a separately downloaded component. `cmake` is also required transitively by wasmtime-c-api-impl.",
+        "note": "QG-001 est vert sur aarch64-apple-darwin. Le refactor est prouvé complet par inventaire avant/après (172 -> 5 expressions restantes, toutes intentionnelles). Seul l'arm macOS (alias absent) a été compilé; les arms Linux et Windows ne peuvent l'être que par la CI. US-001 reste IN_PROGRESS jusqu'à QG-002."
       }
     },
     {
