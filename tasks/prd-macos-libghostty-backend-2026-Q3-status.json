@@ -87,10 +87,24 @@
       "id": "US-002",
       "title": "Fermer le spike de build Mach-O reproductible",
       "epic": "EP-002",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "priority": "P0",
       "size": "L",
-      "blocked_by": []
+      "blocked_by": [],
+      "started_at": "2026-08-15",
+      "findings": "tasks/us-002-macos-zig-spike-findings.md",
+      "verification": {
+        "inputs_confirmed": [
+          "Zig 0.15.2 aarch64-macos sha256 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b matches the official ziglang.org download index",
+          "Ghostty clean checkout at ae52f97dcac558735cfa916ea3965f247e5c6e9e",
+          "include/ghostty/vt.h matches header_sha256 in native/libghostty/manifest.toml"
+        ],
+        "blocked_by_environment": [
+          "Zig 0.15.2 cannot link natively: the host is detected as macOS 27.0.0 while the newest installed SDK is 26.5, so libSystem.tbd declares no symbols for the target and all of libc resolves undefined. Proven with --verbose-link; not fixed by SDKROOT, DEVELOPER_DIR, MACOSX_DEPLOYMENT_TARGET or xcrun --kill-cache.",
+          "The pinned Ghostty build.zig calls LibCInstallation.findNative() unconditionally on Darwin (src/build/SharedDeps.zig:146 via GhosttyBench.init), so hiding the SDK to work around the first blocker is not viable either."
+        ],
+        "note": "Aucune archive produite, donc la question de reproductibilité qui motive US-002 reste ouverte. Deux résultats sont néanmoins acquis pour US-003: la cible de déploiement doit être épinglée dans le triple (aarch64-macos.13.0.0) plutôt qu'héritée de l'hôte, et zig ar / zig objcopy offrent un remplacement hermétique de eu-strip + ar -D."
+      }
     },
     {
       "id": "US-003",
