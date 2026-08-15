@@ -256,6 +256,9 @@ Stateful methods dispatch to GPUI main thread via `mpsc::channel`, polled every 
 Active PRDs in `tasks/`:
 - `prd-v2-gpui-terminal.md` - 19 stories, all delivered (US-001 through US-019)
 - `prd-v2-title-bar.md` - 12 stories, all delivered (US-001 through US-012)
+- `prd-linux-libghostty-backend-2026-Q3.md` + `prd-linux-libghostty-promotion-2026-Q3.md` - libghostty-vt on Linux, delivered and promoted to `auto`
+- `prd-windows-libghostty-backend-2026-Q3.md` - 18 stories, all delivered; libghostty-vt promoted to `auto` on Windows x64 MSVC
+- `prd-macos-libghostty-backend-2026-Q3.md` - 17 stories, IN_PROGRESS; brings macOS Apple Silicon onto libghostty-vt so all three platforms share one VT engine. EP-001 (single `cfg` alias for backend availability) is platform-neutral and lands first.
 
 Architecture decision: `tasks/audit-v2-options-final.md`
 Historical cmux reference spec: `CMUX_ANALYSIS.md` (417 lines, covers the Swift architecture that inspired some workspace ergonomics; Paneflow is an independent codebase, not a fork.)

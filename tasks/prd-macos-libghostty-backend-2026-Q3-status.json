@@ -1,0 +1,262 @@
+{
+  "prd": {
+    "file": "tasks/prd-macos-libghostty-backend-2026-Q3.md",
+    "title": "Backend libghostty natif pour Paneflow sous macOS",
+    "created_at": "2026-08-15",
+    "status": "IN_PROGRESS"
+  },
+  "epics": [
+    {
+      "id": "EP-001",
+      "title": "Unifier les gates de compilation du backend Ghostty",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "stories_total": 1,
+      "stories_done": 0
+    },
+    {
+      "id": "EP-002",
+      "title": "Établir la fondation native aarch64-apple-darwin",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 3,
+      "stories_done": 0
+    },
+    {
+      "id": "EP-003",
+      "title": "Porter le host Ghostty sur le PTY Darwin",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 3,
+      "stories_done": 0
+    },
+    {
+      "id": "EP-004",
+      "title": "Atteindre la parité terminal et workflow macOS",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 4,
+      "stories_done": 0
+    },
+    {
+      "id": "EP-005",
+      "title": "Industrialiser CI, sécurité, performance et packaging",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 4,
+      "stories_done": 0
+    },
+    {
+      "id": "EP-006",
+      "title": "Qualifier, promouvoir et rendre le rollback explicite",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 2,
+      "stories_done": 0
+    }
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Introduire l’alias cfg unique du backend Ghostty",
+      "epic": "EP-001",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [],
+      "started_at": "2026-08-15"
+    },
+    {
+      "id": "US-002",
+      "title": "Fermer le spike de build Mach-O reproductible",
+      "epic": "EP-002",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": []
+    },
+    {
+      "id": "US-003",
+      "title": "Distribuer l’artefact macOS de façon hermétique",
+      "epic": "EP-002",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-002"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Rendre la frontière FFI sûre sur macOS et ajouter le smoke headless",
+      "epic": "EP-002",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-003"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Élargir le host POSIX de Linux à Darwin",
+      "epic": "EP-003",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-001",
+        "US-004"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Valider l’observation et l’arrêt de processus sur Darwin",
+      "epic": "EP-003",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Couvrir drain final, backpressure, resize et stress macOS",
+      "epic": "EP-003",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005",
+        "US-006"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Étendre le corpus rendu et interaction à macOS",
+      "epic": "EP-004",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-004",
+        "US-005"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Intégrer le clavier macOS, Option-as-Meta, dead keys et IME",
+      "epic": "EP-004",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Valider paste, clipboard, souris, focus et liens sur macOS",
+      "epic": "EP-004",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-005",
+        "US-009"
+      ]
+    },
+    {
+      "id": "US-011",
+      "title": "Qualifier les shells et workflows Paneflow réels sur macOS",
+      "epic": "EP-004",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-010"
+      ]
+    },
+    {
+      "id": "US-012",
+      "title": "Ajouter la lane CI native macOS et les contrôles supply-chain",
+      "epic": "EP-005",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-003",
+        "US-004"
+      ]
+    },
+    {
+      "id": "US-013",
+      "title": "Enforcer corpus, performance et budgets de ressources sur macOS",
+      "epic": "EP-005",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-007",
+        "US-008",
+        "US-009"
+      ]
+    },
+    {
+      "id": "US-014",
+      "title": "Intégrer le linkage statique au bundle, à la signature et au cask",
+      "epic": "EP-005",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-012",
+        "US-013"
+      ]
+    },
+    {
+      "id": "US-015",
+      "title": "Exécuter la matrice macOS et publier le runbook de diagnostic",
+      "epic": "EP-005",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-011",
+        "US-014"
+      ]
+    },
+    {
+      "id": "US-016",
+      "title": "Ajouter la sélection macOS et le mode de qualification",
+      "epic": "EP-006",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "S",
+      "blocked_by": [
+        "US-005",
+        "US-007"
+      ]
+    },
+    {
+      "id": "US-017",
+      "title": "Promouvoir Ghostty comme backend auto sous macOS",
+      "epic": "EP-006",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "S",
+      "blocked_by": [
+        "US-011",
+        "US-012",
+        "US-013",
+        "US-014",
+        "US-015",
+        "US-016"
+      ]
+    }
+  ]
+}
