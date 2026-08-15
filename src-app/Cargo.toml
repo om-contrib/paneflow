@@ -13,6 +13,12 @@ categories.workspace = true
 readme = "../README.md"
 
 [features]
+# Source code never tests these features directly for backend availability.
+# `src-app/build.rs` (`emit_ghostty_backend_cfg`) folds "supported target AND
+# feature enabled" into the single `paneflow_ghostty` cfg, and every gate uses
+# that. Adding a platform means one arm there plus one feature here - not an
+# edit at ~170 call sites. Enforced by `tests/ghostty_cfg_policy.rs`.
+# (macOS libghostty EP-001 US-001.)
 default = ["libghostty-linux", "libghostty-windows"]
 # Linux-only backend backed by the pinned libghostty-vt archive. It is the
 # standard backend for cargo run, development builds, and official releases.

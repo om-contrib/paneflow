@@ -64,7 +64,21 @@
       "priority": "P0",
       "size": "M",
       "blocked_by": [],
-      "started_at": "2026-08-15"
+      "started_at": "2026-08-15",
+      "verification": {
+        "implemented_at": "2026-08-15",
+        "sites_rewritten": 170,
+        "sites_left_explicit": 4,
+        "local_gates_passed": [
+          "cargo fmt --check",
+          "tests/ghostty_cfg_policy.rs (compiled standalone with rustc --test, run against the real source tree, plus a negative control that fails as expected)"
+        ],
+        "local_gates_blocked": [
+          "cargo check / clippy / test -p paneflow-app: the dev machine has Command Line Tools only, so gpui_macos cannot compile its Metal shaders (xcrun: unable to find utility \"metal\"). Requires full Xcode.",
+          "QG-002 Linux and Windows neutrality: cannot be produced locally, needs the CI matrix on the candidate commit."
+        ],
+        "note": "Le refactor est textuellement complet et prouvé par inventaire avant/après, mais aucun des trois arms n'a été compilé localement. US-001 ne peut pas passer DONE avant QG-001 sur macOS et QG-002 sur Linux/Windows."
+      }
     },
     {
       "id": "US-002",
