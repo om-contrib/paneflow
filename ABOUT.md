@@ -10,8 +10,10 @@ worktree review, a read-only MCP bridge, and scriptable orchestration.
 
 ## What makes it different
 
-- **Native, not Electron.** Rust, GPUI, and `alacritty_terminal`, with GPU
-  rendering through Vulkan, Metal, and DirectX.
+- **Native, not Electron.** Rust and GPUI, with GPU rendering through Vulkan,
+  Metal, and DirectX. Terminal emulation runs on a statically linked
+  `libghostty-vt` engine by default on Linux and Windows x64, with
+  `alacritty_terminal` on macOS and as the explicit rollback.
 - **Built for agent supervision.** Paneflow tracks which agents are thinking,
   waiting, stalled, failed, or done instead of leaving you to scan raw
   scrollback.

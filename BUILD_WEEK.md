@@ -83,7 +83,7 @@ Building the interactive layouts for the `paneflow.dev` landing page was just as
 
 I'm proud to have taken this migration all the way to shipping. Ghostty is now the default backend on Linux and Windows, statically linked and shipped with no separate runtime. Alacritty remains immediately available if something goes wrong.
 
-Paneflow has already recorded more than 150 opt-in users in PostHog. It is an early signal that the coordination problem it addresses extends beyond my own workflow.
+As of the July 21, 2026 submission, Paneflow had recorded more than 150 opt-in users in PostHog. It is an early signal that the coordination problem it addresses extends beyond my own workflow.
 
 I also used Paneflow to build Paneflow. Several Codex sessions with GPT-5.6 Sol were working in parallel on the Ghostty migration, the Windows port, the tests, the app, and the website. I could immediately see which session was waiting or had failed, read its output, compare its changes, and step in without losing context. Paneflow solved the problem that led me to create it.
 

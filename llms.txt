@@ -14,6 +14,7 @@
 ## User-Facing Concepts
 
 - Panes and workspaces: real PTY terminals grouped by project context.
+- Terminal engine: statically linked `libghostty-vt` by default on Linux and Windows x64 MSVC; `alacritty_terminal` on macOS and as the explicit rollback via `terminal.backend`.
 - Agent state: thinking, waiting for input, finished, errored, stalled, or unknown.
 - Paneflow Conductor: `paneflow` CLI, JSON-RPC IPC, `paneflow up`, `paneflow watch`, and `paneflow flow run`.
 - MCP bridge: `list_panes`, `read_pane`, and `search_pane`; read-only and untrusted-output aware.
@@ -23,6 +24,10 @@
 
 - [Workspace manifest](Cargo.toml) - Rust workspace members, version, release profile, and shared metadata.
 - [Desktop app crate](src-app/) - GPUI application, terminal rendering, panes, IPC, settings, update flow.
+- [Ghostty FFI crate](crates/paneflow-libghostty-sys/) - raw Ghostty ABI, static-archive verification and linking.
+- [Ghostty engine crate](crates/paneflow-terminal-ghostty/) - safe Rust interface over Ghostty state, input, search, and owned snapshots.
+- [Ghostty smoke crate](crates/paneflow-ghostty-smoke/) - native smoke binary for Ghostty, PTY I/O, resize, and shutdown.
+- [Native Ghostty inputs](native/libghostty/) - pinned source manifest and reviewed prebuilt static archives per target.
 - [Config crate](crates/paneflow-config/) - config schema, loader, resolver, and watcher logic.
 - [IPC client crate](crates/paneflow-ipc-client/) - blocking JSON-RPC client used by CLI and MCP.
 - [MCP crate](crates/paneflow-mcp/) - read-only MCP server implementation.
@@ -30,6 +35,8 @@
 - [Shim crate](crates/paneflow-shim/) - helper for agent lifecycle hooks.
 - [AI hook crate](crates/paneflow-ai-hook/) - lightweight hook callback binary.
 - [Process crate](crates/paneflow-process/) - bounded external process execution helpers.
+- [Telemetry crate](crates/paneflow-telemetry/) - opt-in telemetry plumbing, fail-closed on consent.
+- [ACP crate](crates/paneflow-acp/) - legacy agent identity enum and environment scrub.
 
 ## Release And Trust
 

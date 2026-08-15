@@ -5,6 +5,27 @@ notes are available on the [GitHub Releases](https://github.com/arthjean/paneflo
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-21
+
+### Fixed
+
+- The Windows title bar now paints an opaque theme surface whenever its own
+  chrome material is disabled, instead of exposing terminal-only Mica when the
+  terminal enabled the host-window backdrop. It stays transparent when the
+  chrome material is intentionally active. Linux and macOS chrome behavior is
+  unchanged.
+
+### Changed
+
+- Refreshed `ARCHITECTURE.md` and `README.md` for the shipped dual terminal
+  stack: pinned `libghostty-vt` by default on Linux and Windows x64 MSVC, with
+  Alacritty on macOS and as the explicit cross-platform rollback.
+- Finalized the Build Week implementation evidence and removed the stale French
+  duplicate so the English document is the canonical public account.
+
+No configuration, session format, backend selection, or packaging contract
+changed in this patch.
+
 ## [0.8.1] - 2026-07-21
 
 ### Changed
@@ -16,6 +37,363 @@ notes are available on the [GitHub Releases](https://github.com/arthjean/paneflo
   child spawn; live sessions never switch backend. Linux keeps its existing
   Ghostty selection, macOS remains on Alacritty, and persisted workspace and
   session formats are unchanged.
+
+## [0.8.0] - 2026-07-18
+
+### Changed
+
+- **Ghostty becomes the Linux terminal engine.** New terminal sessions in
+  standard Linux builds now run on a pinned, statically linked `libghostty-vt`
+  engine: parsing, terminal state, input, snapshots, search, selection, mouse
+  reporting, clipboard, hyperlinks, prompt marks, scrollback, resize, and
+  shutdown. Alacritty remains available with `terminal.backend = "alacritty"`,
+  applied to new sessions only. macOS and Windows stay on Alacritty in this
+  release.
+- Terminal scrollback is now process-local and is no longer serialized as raw
+  output in `session.json`. Restored workspaces keep their layout, cwd, and
+  metadata; historical terminal output starts fresh.
+- Replaced the one-cell terminal gutter with a fixed 3 px inset so grid, tabs,
+  and scrollbar align consistently.
+
+### Added
+
+- Dedicated FFI, safe-wrapper, engine, and smoke-test crates around
+  `libghostty-vt`. Ghostty is pinned to `ae52f97d`, Zig to `0.15.2`, and the
+  native ABI to `0.1.0`, with verified headers, bindings, build metadata,
+  archives, and third-party notices. Normal development builds need neither a
+  Ghostty checkout nor Zig, and official packages have no runtime `libghostty`
+  dependency.
+- A 130-case Alacritty/Ghostty differential corpus (115 exact-parity cases plus
+  15 explicitly pinned semantic differences), parser and snapshot fuzz targets,
+  chunk-boundary checks, ABI/layout validation, PTY stress coverage, callback
+  panic containment, and release-size gates.
+- Previous/next prompt navigation actions backed by OSC 133 prompt marks.
+- Reversible 120 ms hover feedback across Settings, pane tabs, Review, Agents,
+  broadcast controls, sidebars, custom buttons, terminal search, scrollbars, and
+  window controls; fixed navigation headers for Agents, Changes, and Settings.
+
+### Removed
+
+- The experimental Rosetta status surface, its title-bar toggle, runtime state,
+  runbook, and the `rosetta_enabled` / `rosetta_show_passive` settings. Agent
+  attention remains available through the sidebar, desktop notifications, tab
+  indicators, and the Attention Queue.
+
+## [0.7.11] - 2026-07-14
+
+### Changed
+
+- Rebuilt workspace cards around a compact title row plus a single metadata row
+  for Git branch, changed files, and detected services, with multi-agent state
+  consolidated into one prioritized indicator.
+- Bundled JetBrainsMono Nerd Font Mono (regular through bold, plus italics) and
+  made it the cross-platform terminal default, with built-in Nerd Font glyph
+  coverage for shells and prompts.
+- SGR bold now advances one weight from the configured base instead of forcing
+  weight 700.
+- Updated the pinned GPUI/Zed fork to a newer upstream base while retaining the
+  Paneflow streamed-Markdown append optimization.
+
+### Added
+
+- A persistent completion indicator that stays visible until the workspace is
+  opened, and directly clickable detected frontend services on workspace cards.
+
+### Removed
+
+- The experimental Hera shadow-terminal integration, diagnostic side-by-side
+  renderer, and dogfood crates.
+
+## [0.7.10] - 2026-07-10
+
+### Fixed
+
+- Long workspace titles no longer overflow their sidebar cards; the
+  active-session indicator stays visible and rename fields stay contained.
+
+## [0.7.9] - 2026-07-07
+
+### Fixed
+
+- Corrected the Windows MSI publisher pin to `StriveX`, fixing the misleading
+  "corrupt or tampered" self-update error introduced in 0.7.7. Added a release
+  smoke check comparing the pinned publisher against the Authenticode subject,
+  and made GitHub Releases draft-only until every signed asset is verified.
+
+## [0.7.8] - 2026-07-07
+
+### Added
+
+- Three branded dark theme presets - `Vercel`, `Claude`, and `Cursor` - with
+  their own UI tokens, terminal palettes, and syntax colors. Presets can define
+  app-wide UI colors, not just terminal ANSI slots.
+- Bundled `Geist` and `Geist Mono` (SIL OFL). The UI font defaults to `Geist`
+  and the terminal font to `Geist Mono` on every platform.
+
+### Fixed
+
+- Windows: external URLs, editor launches, folder opens, taskbar identity
+  (`Strivex.PaneFlow`), Start Menu shortcut icons, and notifications were
+  hardened for packaged installs.
+- Terminal hyperlink hover no longer paints a full URL tooltip, and sidebar
+  diff stats hide zero-count sides instead of showing `+0 -0`.
+
+## [0.7.7] - 2026-07-06
+
+### Changed
+
+- Broad hardening pass across the agent control plane, terminal runtime,
+  workspace persistence, diff workflow, and distribution pipeline (36 commits).
+- MCP pane tools now advertise read-only behavior, clamp output, default to the
+  current workspace, and require an explicit opt-in for instance-wide reads.
+  Terminal data returned to agents is fenced as untrusted output.
+- `workspace.up` plans pane spawns before execution, canonicalizes working
+  directories, dedupes labels, and bounds context/prefill content.
+- Notification surfaces are now **opt-in** instead of on by default.
+- `surface.send_keystroke` rejects newline bytes; use `surface.send_text` for
+  text submission.
+- Persisted surface schema exposes tabbed surface fields so split/tab layouts
+  restore faithfully.
+- Signed self-update flows reject unsigned or keyless builds before touching
+  disk; Windows MSI updates stage through a relay after the process exits.
+
+## [0.7.6] - 2026-07-01
+
+### Added
+
+- Settings → Terminal now exposes cursor shape, cursor color, font size, font
+  weight, line height, cell width, integrated block glyphs, color emoji,
+  ligatures, scrollback, and Windows terminal material, with matching
+  `paneflow.json` schema coverage.
+
+### Changed
+
+- Renderer pass: text rounds onto stable cell pixels, cursor painting handles
+  wide glyphs and emoji accurately, and the default cursor color moves to Apple
+  system blue. Golden snapshots refreshed.
+- Windows-only terminal and chrome material toggles let Mica or blur show
+  through, while non-CLI surfaces stay opaque and cross-platform configs stay
+  safe on Linux/macOS.
+- Pinned Rust toolchain bumped to 1.96.1 across local, CI, release, and docs.
+
+### Security
+
+- Updated `anyhow` to clear `RUSTSEC-2026-0190`.
+
+## [0.7.5] - 2026-06-30
+
+### Added
+
+- Agent session discovery and resume support for Pi, Hermes, Grok, Cursor
+  Agent, Gemini, and Kiro, on top of Claude, Codex, and OpenCode. Resume keeps
+  the strict session-id guard before anything reaches a PTY.
+- Restart controls for bottom-dock and sidebar agent terminals so they pick up
+  the active integrated-terminal shell.
+- Files sidebar animation, focus-on-toggle, and arrow/Home/End/Enter/Escape
+  keyboard navigation.
+- Diff review interactivity: unified/split switching, collapse-all and per-file
+  folding, fold expansion, per-file horizontal scrolling, and language icons.
+
+### Changed
+
+- Native compositor backdrop/blur on Linux is now opt-in through
+  `PANEFLOW_LINUX_NATIVE_BACKDROP`; Wayland/X11 users get an opaque background
+  by default.
+
+## [0.7.4] - 2026-06-29
+
+### Added
+
+- A visual workspace-template builder in Settings, backed by
+  `commands[].workspace`: project path, layout preset, panes, agents, shell
+  commands, pane labels, cwd overrides, env, and prompt prefill, launched
+  through the same `workspace.up` path as the CLI.
+- A workspace context-menu "Run Workflow" action that launches a matching saved
+  template into an already-open workspace.
+
+### Changed
+
+- The Terminal settings page keeps the primary controls (cursor shape, bell,
+  font family, font size); advanced knobs remain available in `paneflow.json`.
+- Windows and macOS chrome material stays unobscured; Linux keeps its
+  readability veil.
+
+## [0.7.3] - 2026-06-29
+
+### Fixed
+
+- Windows hook commands are wrapped in an explicit PowerShell invocation, so
+  installed paths under `C:\Program Files\PaneFlow\...` work when a hook runner
+  executes through PowerShell instead of `cmd.exe`. Applies to Codex's
+  `commandWindows` field, the Claude-compatible strict configs (CodeBuddy,
+  Qoder, Gemini, Cursor, Grok, Hermes), and persistent
+  `paneflow hooks setup` entries.
+
+## [0.7.2] - 2026-06-29
+
+### Fixed
+
+- Codex hook commands on Windows when Paneflow is installed under a path with
+  spaces, including `C:\Program Files\PaneFlow`.
+- Paneflow-managed hook cleanup for PowerShell-wrapped commands, including
+  quoted paths and orphaned hook commands.
+- The sidebar update banner: clicking the banner starts the self-update flow,
+  while the dismiss control only dismisses.
+
+## [0.7.1] - 2026-06-28
+
+### Fixed
+
+- Agent status hooks on Windows for release installs under paths such as
+  `C:\Program Files\PaneFlow`, including Codex fallback commands that no longer
+  rely on POSIX single quotes.
+- Gemini hook installation updated to the current matcher-group schema and
+  millisecond timeout; Cursor kept on its flat `hooks.json` schema with a
+  Windows-safe command string.
+
+### Changed
+
+- Rewrote `README.md` around the current native Rust/GPUI release surface,
+  reworked `ABOUT.md`, added `llms.txt`, and refreshed `ARCHITECTURE.md` to
+  match the codebase.
+
+## [0.7.0] - 2026-06-28
+
+### Added
+
+- **Rosetta**, an in-app top-center agent status surface for CLI and Agents
+  mode. It derives rows from workspace `agent_sessions`, Agents-mode thread
+  status, surface ids, and waiting timestamps, then groups them into
+  needs-input, failed, stalled, running, and recent sections. Rows are
+  actionable and route back to the originating pane or thread.
+- A dedicated Settings → Notifications page covering native OS notifications,
+  Rosetta visibility, and passive running-agent summaries, backed by
+  `rosetta_enabled` and `rosetta_show_passive`.
+- JSON tool manifests under `mcps/paneflow/tools/` for `list_panes`,
+  `read_pane`, and `search_pane`, carrying the untrusted-output warning.
+
+### Security
+
+- Agent-provided text in Rosetta is treated as untrusted data: plain text only,
+  capped, sanitized, and visually separated from Paneflow controls. Freeform
+  agent messages cannot create approval buttons.
+
+## [0.6.10] - 2026-06-27
+
+### Fixed
+
+- Windows in-app updates now use a detached relay that survives the main
+  process exit, moves UAC elevation to the relay's `msiexec` invocation, waits
+  for the installer to finish, and relaunches Paneflow on success, cancel, or
+  failure. The staged MSI is always removed afterwards.
+
+### Changed
+
+- Release publishing is now gated by every real validation job: all Linux
+  distro smokes, a new end-to-end Windows MSI install/relay/uninstall smoke on
+  `windows-2022`, and the Linux auto-update E2E. The auto-update E2E signs its
+  own tarball so it stays a true pre-publish gate.
+
+## [0.6.9] - 2026-06-27
+
+### Fixed
+
+- Windows agent hooks now use a native `commandWindows` entry invoking
+  `paneflow-ai-hook.exe` through `cmd.exe /D /C`, so Codex and compatible
+  agents no longer route Paneflow hooks through bash or WSL. This clears the
+  repeated `SessionStart` / `PreToolUse` / `PostToolUse` `hook exited with
+  code 1` failures on Windows machines without a WSL distribution. The portable
+  `command` field is still written as the cross-platform fallback and
+  ownership marker.
+
+## [0.6.8] - 2026-06-27
+
+### Fixed
+
+- Windows MSI self-update now uses a native relay staged as
+  `paneflow-msi-relay-<pid>.exe` in `%TEMP%` instead of a hidden PowerShell
+  handoff, behind a hidden `--msi-relay` entrypoint that runs before GPUI and
+  single-instance handling. Machine-wide installs request UAC **before**
+  Paneflow exits, so cancelling elevation leaves the app open. Failed updates
+  now leave diagnostics in `%TEMP%`.
+
+### Upgrade note
+
+- Users on 0.6.6 or 0.6.7 whose in-app updater closes Paneflow without
+  installing must install 0.6.8 manually from the MSI once; the broken handoff
+  lives in the old binary.
+
+## [0.6.7] - 2026-06-27
+
+### Added
+
+- Restored native desktop notifications for agent lifecycle events - completed
+  turns, approval/input requests, unexpected exits, and stalled agents - when
+  Paneflow is not foregrounded.
+- An animated startup splash, smooth sidebar transitions, fixed-width terminal
+  tabs, hover-to-close tabs, better title truncation and tooltips, and a
+  collapsible tab-bar action cluster.
+
+### Changed
+
+- Service badges are less timing-dependent, Windows now participates in port
+  detection, and agent status is shared between the UI and IPC.
+
+### Known issue
+
+- The built-in updater in 0.6.7 cannot correctly upgrade to newer releases on
+  Windows; install the newer MSI manually once. Fixed in 0.6.10.
+
+## [0.6.6] - 2026-06-26
+
+### Fixed
+
+- The Windows MSI updater no longer asks Windows Installer to replace
+  `paneflow.exe` while Paneflow is alive. It downloads and verifies the MSI,
+  saves the session, starts a detached relay, then exits; the relay waits for
+  the GUI process to disappear, runs `msiexec`, removes the temporary MSI, and
+  relaunches. This avoids the native `FilesInUse` dialog.
+- APT updates now install `paneflow=<version>-1`, matching the `.deb` version
+  emitted by `cargo-deb`. DNF stays on `paneflow-<version>`.
+- The legacy `.run`/tarball migration path is now Linux-only, so macOS
+  `Unknown` installs no longer write a Linux-style `~/.local/paneflow.app`
+  layout.
+
+## [0.6.5] - 2026-06-26
+
+### Fixed
+
+- Windows terminal panes track shell cwd reliably through OSC 7 integration for
+  PowerShell 5.1, PowerShell 7, and Git Bash, captured before Alacritty
+  consumes the stream. Shell preset matching no longer mislabels
+  `C:\Windows\System32\bash.exe` as Git Bash.
+
+### Changed
+
+- Review and Agents diff views window large split diffs around hunks, retain
+  diff rows across mode switches, and filter duplicated worktree columns.
+- Windows is now a hard release target: the signed MSI build, packaging, and
+  verification must pass before a stable release is published.
+
+## [0.6.4] - 2026-06-25
+
+Supersedes 0.6.3, which shipped without a complete Windows MSI artifact.
+
+### Fixed
+
+- Windows environments where launching `claude`, `codex`, `opencode`, `gemini`,
+  and other helper shims could be blocked by Application Control / AppLocker /
+  Smart App Control. The MSI now installs signed helper binaries under the
+  managed install directory instead of relying on per-user extraction from
+  `%LocalAppData%`.
+- `${port_offset}` support inside `flow.toml` pane environment variables.
+  `flow.toml` now shares port allocation behavior with `paneflow up`, including
+  port-base handling and busy-port skipping, and supports flow-level
+  `port_base`. `flow --dry-run` includes resolved pane environment data.
+
+## [0.6.3] - 2026-06-25
+
+Superseded by 0.6.4, which shipped the complete Windows MSI artifact.
 
 ## [0.6.2] - 2026-06-24
 
@@ -158,6 +536,25 @@ Linux, macOS, and Windows over the named-pipe transport.
 - Windows: the console-subsystem binary is kept (only the lonely GUI console is
   shed), the workspace test suite passes natively, and the macOS DMG and process
   unit tests are made cross-platform.
+
+## [0.5.10] - 2026-06-19
+
+### Fixed
+
+- Per-file horizontal scrolling is back in the diff body. Each file in the
+  Agents diff dock and the Review column owns its own horizontal offset again
+  after the shared direct-paint `DiffElement` migration, reachable with
+  Shift+wheel or a trackpad horizontal swipe while native vertical scrolling
+  stays untouched.
+- The Agents environment toolbar no longer covers the CLI: the model selector
+  and layout toggles sit in a reserved top band, so narrow windows cannot make
+  the floating toolbar paint over the first terminal lines.
+
+### Changed
+
+- Added shared diff horizontal-scroll geometry in `diff/hscroll.rs`, reused by
+  both the Agents dock and the Review column, with per-file span metadata
+  computed off the render path.
 
 ## [0.5.9] - 2026-06-18
 

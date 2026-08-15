@@ -1,7 +1,12 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-PaneFlow is a Rust workspace. `src-app/` contains the `paneflow` desktop binary: UI, terminal rendering, pane management, IPC, themes, and bundled helper binaries under `src-app/assets/`. `crates/paneflow-*` contains the shared config, IPC, process, telemetry, ACP, shim, AI-hook, MCP, and installer crates. Top-level `assets/` holds desktop packaging assets, `scripts/` contains utility scripts, and `tasks/` tracks PRDs and story status files.
+PaneFlow is a Rust workspace with 13 members. `src-app/` contains the `paneflow` desktop binary and CLI entrypoint: UI, terminal rendering, pane management, IPC, themes, and bundled helper binaries under `src-app/assets/`. `crates/paneflow-*` contains the shared config, IPC-client, process, telemetry, ACP, shim, AI-hook, MCP, and MCP-installer crates, plus the three terminal-engine crates (`paneflow-libghostty-sys`, `paneflow-terminal-ghostty`, `paneflow-ghostty-smoke`). `native/libghostty/` holds the pinned Ghostty manifest and the reviewed prebuilt static archives. Top-level `assets/` holds desktop packaging assets, `packaging/` the repo layouts, `schemas/` the public JSON schema, `mcps/paneflow/tools/` the MCP tool manifests, `fuzz/` the cargo-fuzz targets, `scripts/` utility scripts, `docs/` user and release documentation, and `tasks/` PRDs and story status files.
+
+`default-members = ["src-app"]`, so bare `cargo run` / `cargo build` target the desktop app rather than becoming ambiguous across the helper binaries.
+
+## Terminal backends
+Terminal emulation is dual-engine. `src-app/Cargo.toml` sets `default = ["libghostty-linux", "libghostty-windows"]`, so `terminal.backend = "auto"` resolves to the statically linked `libghostty-vt` engine on Linux and Windows x64 MSVC. Upstream `alacritty_terminal` is the macOS backend and the explicit cross-platform rollback (`terminal.backend = "alacritty"`). The choice applies to new sessions only - a live session never switches engine, and a Ghostty startup failure may fall back only before the shell child is spawned. `cargo build` must never fetch, compile, or mutate Ghostty artifacts: it only verifies and links the reviewed archives.
 
 ## Build, Test, and Development Commands
 Run all commands from the repository root.
@@ -10,12 +15,13 @@ Run all commands from the repository root.
 - `cargo build --release` builds the optimized app binary.
 - `cargo run -p paneflow-app` launches the app locally.
 - `RUST_LOG=info cargo run -p paneflow-app` runs with structured logging enabled.
-- `cargo test --workspace` runs unit and integration tests across both crates.
+- `cargo test --workspace` runs unit and integration tests across every crate.
 - `cargo test -p paneflow-app --test flex_nchild -- --nocapture` runs the GPUI layout integration tests only.
 - `cargo clippy --workspace -- -D warnings` treats lint warnings as errors.
 - `cargo fmt --check` verifies formatting.
+- `RUST_LOG=paneflow::terminal::backend=info cargo run` prints the resolved terminal backend.
 
-Compilation depends on local path dependencies for Zed GPUI and the Alacritty fork, so keep those checkouts available before changing build configuration.
+GPUI and the other Zed crates are **git dependencies** pinned to an exact revision of the Paneflow Zed fork (`arthjean/zed`); Cargo fetches them automatically and no local checkout is required. `alacritty_terminal` is plain upstream crates.io, not a fork. Do not convert either to a local path dependency or to a different crates.io source.
 
 ## Coding Style & Naming Conventions
 Use standard Rust formatting with `cargo fmt`; the codebase follows 4-space indentation and Rust defaults. Keep modules and files in `snake_case` (`terminal_element.rs`, `config_writer.rs`), types in `UpperCamelCase`, and functions/tests in `snake_case`. Prefer small, focused modules and brief doc comments where behavior is not obvious. Inline GPUI styling is the established pattern; match existing builder-chain style instead of introducing a separate styling layer.
@@ -33,7 +39,9 @@ This is the cheapest guard against the most expensive CI failure on this repo: t
 Recent history uses Conventional Commit-style prefixes plus scope, for example `feat(app): US-004 - adapt paneflow-hook for Codex PID env var` and `chore(tasks): ...`. Follow `type(scope): description`; include the story ID when work maps to a tracked task. PRs should explain user-visible behavior, list validation steps, link the relevant issue or PRD entry, and include screenshots or short recordings for UI changes.
 
 ## Configuration Notes
-Do not replace the local-path GPUI dependencies with crates.io versions. Linux is the active target; config files live under `~/.config/paneflow/paneflow.json`.
+Do not replace the pinned Zed git dependencies with crates.io versions or local paths. Linux, macOS Apple Silicon, and Windows x64 all ship as release artifacts - treat all three as active targets. Config resolves through `dirs::config_dir()`: `~/.config/paneflow/paneflow.json` on Linux, `~/Library/Application Support/paneflow/paneflow.json` on macOS, and `%APPDATA%\paneflow\paneflow.json` on Windows. Every key is optional and the public reference lives in `docs/user/configuration/schema.md` and `schemas/`.
+
+Files under `docs/user/` are a **generated mirror** of paneflow.dev, regenerated by `scripts/sync-public-docs.ts` in the site repo. Do not hand-edit them; change the site source and re-sync.
 
 ## Cross-platform compatibility (mandatory)
 
