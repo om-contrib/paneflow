@@ -4155,6 +4155,78 @@ mod tests {
         }
     }
 
+    /// EP-003 US-006 - the POSIX shutdown contract, asserted on the platform
+    /// actually running the test rather than assumed to match Linux.
+    ///
+    /// `terminate_child` and `observe_child_exit` rest on three properties.
+    /// Darwin implements all three, but they are exactly the kind of detail
+    /// that differs quietly between POSIX systems, and getting any of them
+    /// wrong leaks processes or reaps a PID early enough for the kernel to
+    /// reuse it under the group kill:
+    ///
+    /// 1. portable-pty makes the child its own session leader, so comparing
+    ///    `getpgid(pid)` to `pid` authenticates the group before any wait.
+    /// 2. `waitid` with `WNOHANG` reports "still running" without error.
+    /// 3. `waitid` with `WNOWAIT` observes the exit *without reaping it*, so
+    ///    the status can be read more than once and the PID stays reserved
+    ///    while the rest of the process group is terminated.
+    #[cfg(unix)]
+    #[test]
+    fn posix_child_observation_leaves_the_pid_reserved() {
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 640,
+                pixel_height: 384,
+            })
+            .expect("open a native PTY");
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.args(["-c", "exit 7"]);
+        let mut child = pair.slave.spawn_command(command).expect("spawn /bin/sh");
+        let child_pid = child.process_id().expect("child PID");
+        drop(pair.slave);
+
+        assert_eq!(
+            verified_process_group(child_pid),
+            i32::try_from(child_pid).ok(),
+            "portable-pty must leave the child as its own session leader, \
+             otherwise the group kill in terminate_child has nothing to authenticate",
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let observed = loop {
+            match observe_child_exit(&mut *child, child_pid) {
+                Ok(Some(status)) => break status,
+                Ok(None) => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "child did not exit within the deadline",
+                    );
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("waitid failed: {error}"),
+            }
+        };
+        assert_eq!(observed.exit_code(), 7);
+
+        // WNOWAIT means the child is still a zombie: the same status must be
+        // readable again, and the PID must remain addressable. If Darwin
+        // reaped here, `terminate_child` could signal a recycled PID.
+        let repeated = observe_child_exit(&mut *child, child_pid)
+            .expect("a non-reaped child stays observable")
+            .expect("the exit status must still be reported");
+        assert_eq!(repeated.exit_code(), observed.exit_code());
+        // SAFETY: signal 0 only probes for the process, it delivers nothing.
+        assert_eq!(
+            unsafe { libc::kill(child_pid as i32, 0) },
+            0,
+            "the observed-but-unreaped child must still be addressable",
+        );
+
+        let _ = child.wait();
+    }
+
     #[test]
     fn live_runtime_runs_platform_shell_and_reports_one_exit() {
         let cwd = std::env::current_dir().unwrap();

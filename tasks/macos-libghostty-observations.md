@@ -66,6 +66,57 @@ libghostty. Toucher `CLAUDE.md` pour ça mélangerait des sujets.
 
 ---
 
+## OBS-004 - Sur POSIX, `shutdown()` d'un enfant vivant ne publie jamais `ChildExited`
+
+**Sévérité :** moyenne
+**Statut :** OPEN
+**Découvert :** 2026-08-16, en portant la matrice de lifecycle sur macOS (US-007)
+**Concerne :** Linux et macOS. Pas Windows.
+
+Dans la boucle du worker Ghostty (`src-app/src/terminal/ghostty_session.rs`,
+arm `#[cfg(unix)]` du test `shutdown_sent`) :
+
+```rust
+if inner.shutdown_sent.load(Ordering::Acquire) {
+    #[cfg(unix)]
+    {
+        if exit.is_none() {
+            terminate_child(child.child_mut(), termination_target);
+            child.disarm();
+            break;              // sort sans publier ChildExited
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        shutdown_requested = true;   // -> séquence qui publie l'événement
+    }
+}
+```
+
+Quand un `shutdown()` explicite arrive alors que l'enfant tourne encore, le
+chemin POSIX termine bien le processus mais quitte la boucle sans passer par
+`publish_child_exit_once`. Le chemin Windows, lui, enclenche une séquence
+d'arrêt qui publie l'événement. `ChildExited` est pourtant décrit dans le code
+comme « the externally observable teardown barrier ».
+
+Observé en écrivant la matrice de lifecycle macOS : le scénario « shell
+bloqué » attend l'événement après `shutdown()` et expire, alors que le
+processus est bien terminé. Le test macOS assère donc la terminaison du
+processus au lieu de l'événement, avec un commentaire renvoyant ici.
+
+**Hors périmètre :** le comportement est antérieur à ce chantier et identique
+sur Linux, où il est livré depuis la promotion du backend. Le corriger
+changerait la sémantique d'arrêt d'une plateforme en production, ce qui mérite
+sa propre décision plutôt que d'être glissé dans un port.
+
+**Piste :** décider si `ChildExited` doit être publié sur tout arrêt, y compris
+demandé, et aligner les deux plateformes. Vérifier au passage les consommateurs
+de l'événement (marks, service detector, nettoyage d'état workspace) pour
+savoir si l'absence a un effet visible ou reste inerte parce que la vue est
+détruite de toute façon.
+
+---
+
 ## OBS-003 - Zig 0.15.2 ne peut pas construire nativement sur un SDK macOS 26+
 
 **Sévérité :** moyenne
