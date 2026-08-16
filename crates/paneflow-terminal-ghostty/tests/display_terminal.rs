@@ -1,4 +1,4 @@
-#![cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#![cfg(paneflow_ghostty_native)]
 
 use paneflow_terminal_ghostty::{
     BackendEvent, Color, DisplayTerminal, FocusEvent, Key, KeyAction, KeyInput, Modifiers,

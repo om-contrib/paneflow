@@ -30,7 +30,11 @@
 // into per-platform gating. See tests/ghostty_cfg_policy.rs.
 #[cfg(all(
     paneflow_ghostty,
-    not(any(feature = "libghostty-linux", feature = "libghostty-windows"))
+    not(any(
+        feature = "libghostty-linux",
+        feature = "libghostty-macos",
+        feature = "libghostty-windows"
+    ))
 ))]
 compile_error!(
     "`paneflow_ghostty` is set but no `libghostty-*` feature is enabled: \

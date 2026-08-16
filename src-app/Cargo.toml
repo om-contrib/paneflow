@@ -19,12 +19,30 @@ readme = "../README.md"
 # that. Adding a platform means one arm there plus one feature here - not an
 # edit at ~170 call sites. Enforced by `tests/ghostty_cfg_policy.rs`.
 # (macOS libghostty EP-001 US-001.)
+# `libghostty-macos` is deliberately NOT in default yet. Enabling it compiles
+# the Ghostty session modules on macOS, which still reference POSIX helpers
+# gated to Linux (EP-003 US-005), and there is no reviewed macOS artifact to
+# link either. Until both land, a default macOS build must stay Alacritty-only
+# and green. Opt in with:
+#   PANEFLOW_LIBGHOSTTY_DIR=target/libghostty/aarch64-apple-darwin \
+#     cargo build -p paneflow-app --features libghostty-macos
 default = ["libghostty-linux", "libghostty-windows"]
 # Linux-only backend backed by the pinned libghostty-vt archive. It is the
 # standard backend for cargo run, development builds, and official releases.
 # The target-specific dependencies keep it inert on macOS/Windows.
 # Enabling it never clones or downloads from build.rs.
 libghostty-linux = [
+    "dep:paneflow-terminal-ghostty",
+    "dep:portable-pty",
+    "paneflow-terminal-ghostty/native",
+]
+# Apple Silicon backend backed by the pinned static archive and the Darwin PTY.
+# Enabled in standard builds so `terminal.backend = "ghostty"` can select it;
+# `auto` still resolves to Alacritty on macOS until the promotion story
+# (EP-006 US-017). Target-specific dependencies keep it inert on Linux,
+# Windows, and Intel macOS, and `--no-default-features` preserves an
+# Alacritty-only recovery build.
+libghostty-macos = [
     "dep:paneflow-terminal-ghostty",
     "dep:portable-pty",
     "paneflow-terminal-ghostty/native",

@@ -22,11 +22,13 @@ required-features = ["native"]
 [dependencies]
 anyhow.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
+# The POSIX smoke drives a real PTY through portable-pty and /bin/sh, which
+# behaves the same on Darwin as on Linux.
+[target.'cfg(any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64")))'.dependencies]
 libc.workspace = true
 portable-pty = { version = "0.9.0", optional = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "windows", all(target_os = "macos", target_arch = "aarch64")))'.dependencies]
 paneflow-terminal-ghostty = { path = "../paneflow-terminal-ghostty", optional = true }
 
 [lints]

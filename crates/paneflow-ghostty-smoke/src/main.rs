@@ -1,5 +1,5 @@
-#[cfg(target_os = "linux")]
-mod linux {
+#[cfg(any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64")))]
+mod posix {
     use std::io::{Read, Write};
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
@@ -204,9 +204,9 @@ mod windows {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64")))]
 fn main() {
-    if let Err(error) = linux::run() {
+    if let Err(error) = posix::run() {
         eprintln!("libghostty package smoke failed: {error:#}");
         std::process::exit(1);
     }
@@ -222,8 +222,14 @@ fn main() {
     println!("libghostty Windows headless smoke passed");
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "windows",
+    all(target_os = "macos", target_arch = "aarch64")
+)))]
 fn main() {
-    eprintln!("libghostty package smoke is available only on Linux or Windows");
+    eprintln!(
+        "libghostty package smoke is available only on Linux, Windows, or Apple Silicon macOS"
+    );
     std::process::exit(2);
 }

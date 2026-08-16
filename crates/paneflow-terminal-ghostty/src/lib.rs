@@ -1,58 +1,54 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod encode;
-#[cfg(all(
-    test,
-    feature = "native",
-    any(target_os = "linux", target_os = "windows")
-))]
+#[cfg(all(test, paneflow_ghostty_native))]
 mod encode_tests;
 mod error;
 mod input;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod input_map;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod limits;
 mod model;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod osc52;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod osc7;
 
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod abi;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod abi_layout;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod callback_ffi;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod callbacks;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod color_query;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod constructor;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod engine;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod grid;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod handles;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod navigation;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod persistence;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod search;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod snapshot;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod snapshot_cell;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod snapshot_ffi;
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 mod snapshot_state;
-#[cfg(not(all(feature = "native", any(target_os = "linux", target_os = "windows"))))]
+#[cfg(not(paneflow_ghostty_native))]
 mod stub;
 
 pub use error::{GhosttyError, Result};
@@ -63,10 +59,10 @@ pub use model::{
     BackendEvent, Cell, CellFlags, Color, Content, Cursor, CursorShape, Hyperlink, Modes, Point,
     Rgb, Scroll, SearchMatch, SearchResult, SelectionRange, UnderlineStyle, WideCell, WindowSize,
 };
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 pub const GHOSTTY_APP_VERSION: &str = paneflow_libghostty_sys::GHOSTTY_APP_VERSION;
 
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BuildIdentity {
     pub source_sha: &'static str,
@@ -76,7 +72,7 @@ pub struct BuildIdentity {
     pub simd: &'static str,
 }
 
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 pub fn build_identity() -> BuildIdentity {
     const MANIFEST: &str = include_str!("../../../native/libghostty/manifest.toml");
 
@@ -96,16 +92,12 @@ pub fn build_identity() -> BuildIdentity {
     }
 }
 
-#[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+#[cfg(paneflow_ghostty_native)]
 pub use engine::DisplayTerminal;
-#[cfg(not(all(feature = "native", any(target_os = "linux", target_os = "windows"))))]
+#[cfg(not(paneflow_ghostty_native))]
 pub use stub::DisplayTerminal;
 
-#[cfg(all(
-    test,
-    feature = "native",
-    any(target_os = "linux", target_os = "windows")
-))]
+#[cfg(all(test, paneflow_ghostty_native))]
 mod identity_tests {
     #[test]
     fn build_identity_is_derived_from_the_pinned_manifest() {

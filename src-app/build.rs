@@ -217,12 +217,17 @@ fn emit_ghostty_backend_cfg() {
 
     let linux =
         std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_LINUX").is_some() && target_os == "linux";
+    // Apple Silicon only - no reviewed Intel artifact exists, and the wrapper
+    // crate declares the -sys dependency for aarch64 macOS alone.
+    let macos = std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_MACOS").is_some()
+        && target_os == "macos"
+        && target_arch == "aarch64";
     let windows = std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_WINDOWS").is_some()
         && target_os == "windows"
         && target_arch == "x86_64"
         && target_env == "msvc";
 
-    if linux || windows {
+    if linux || macos || windows {
         println!("cargo:rustc-cfg=paneflow_ghostty");
     }
 }
