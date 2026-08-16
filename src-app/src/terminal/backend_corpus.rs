@@ -1250,9 +1250,36 @@ pub(crate) fn resident_set_bytes() -> u64 {
     u64::try_from(memory.WorkingSetSize).unwrap_or(u64::MAX)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+/// macOS resident set, read from the kernel's task info.
+///
+/// A real measurement matters here: the resource-recovery budgets in
+/// `ghostty_stress` compare `current.rss` against a baseline, so a stub
+/// returning 0 would make every leak assertion pass vacuously - a test that
+/// cannot fail. `libproc` is already how this codebase queries process state
+/// on macOS (see `workspace/ports.rs`).
+#[cfg(target_os = "macos")]
+pub(crate) fn resident_set_bytes() -> u64 {
+    macos_task_info().map_or(0, |info| info.pti_resident_size)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub(crate) fn resident_set_bytes() -> u64 {
     0
+}
+
+/// Shared `proc_pidinfo(PROC_PIDTASKINFO)` read for this process.
+///
+/// Returns `None` rather than panicking: the query can legitimately fail
+/// under SIP restrictions or an unexpected `getpid` value, and a measurement
+/// helper must never take down the caller.
+#[cfg(target_os = "macos")]
+fn macos_task_info() -> Option<libproc::libproc::task_info::TaskInfo> {
+    use libproc::libproc::proc_pid::pidinfo;
+    use libproc::libproc::task_info::TaskInfo;
+
+    // SAFETY: getpid is always safe and cannot fail.
+    let pid = unsafe { libc::getpid() };
+    pidinfo::<TaskInfo>(pid, 0).ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -1307,9 +1334,41 @@ pub(crate) fn process_cpu_time() -> Duration {
     )
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+/// macOS CPU time, user + system, from the same task-info read as the RSS.
+///
+/// `pti_total_user` and `pti_total_system` are nanosecond counters.
+#[cfg(target_os = "macos")]
+pub(crate) fn process_cpu_time() -> Duration {
+    macos_task_info().map_or(Duration::ZERO, |info| {
+        Duration::from_nanos(info.pti_total_user.saturating_add(info.pti_total_system))
+    })
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub(crate) fn process_cpu_time() -> Duration {
     Duration::ZERO
+}
+
+/// Guards the resource measurements against silently regressing to a stub.
+///
+/// `ghostty_stress` compares a live snapshot against a baseline and asserts
+/// growth stays within 5%. If `resident_set_bytes` ever returned a constant -
+/// as the pre-macOS fallback did - that comparison would hold no matter what
+/// leaked, and the whole lifecycle suite would pass while measuring nothing.
+/// A running test binary always has a resident set well above this floor, so
+/// the assertion is robust without being timing-sensitive.
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[test]
+fn resident_set_is_measured_not_stubbed() {
+    const PLAUSIBLE_FLOOR_BYTES: u64 = 1024 * 1024;
+
+    let rss = resident_set_bytes();
+    assert!(
+        rss > PLAUSIBLE_FLOOR_BYTES,
+        "resident_set_bytes() returned {rss} B, below the {PLAUSIBLE_FLOOR_BYTES} B floor: \
+         the platform implementation is missing or has regressed to a stub, which would make \
+         every resource-recovery assertion in ghostty_stress pass vacuously"
+    );
 }
 
 #[cfg(target_os = "linux")]

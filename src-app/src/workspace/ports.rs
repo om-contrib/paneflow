@@ -513,8 +513,11 @@ pub fn scan_panes(
 /// the Linux `bfs_descendants_via_ppid_linux` fallback. Processes we can't
 /// inspect (EPERM on SIP-protected / other-user pids, dead-pid races) are
 /// skipped - our agents are same-user PTY children, always readable.
+// `pub(crate)` so the Ghostty stress suite can assert on descendant cleanup
+// through this same walker instead of introducing a second process policy
+// (macOS libghostty EP-003 US-006).
 #[cfg(target_os = "macos")]
-fn macos_children_map() -> std::collections::HashMap<u32, Vec<u32>> {
+pub(crate) fn macos_children_map() -> std::collections::HashMap<u32, Vec<u32>> {
     use libproc::libproc::bsd_info::BSDInfo;
     use libproc::libproc::proc_pid::pidinfo;
     use libproc::processes::{ProcFilter, pids_by_type};
@@ -556,8 +559,10 @@ fn macos_children_map() -> std::collections::HashMap<u32, Vec<u32>> {
 /// (see [`macos_children_map`]). Kernel equivalent of the Linux
 /// `/proc/{pid}/task/{pid}/children` traversal; `visited` is shared across
 /// roots (same single-walk contract as Linux). Returns pids in BFS order.
+// `pub(crate)` for the same reason as `macos_children_map`. Note the returned
+// vector INCLUDES `root_pid` as its first element.
 #[cfg(target_os = "macos")]
-fn bfs_descendants_macos(
+pub(crate) fn bfs_descendants_macos(
     root_pid: u32,
     children_of: &std::collections::HashMap<u32, Vec<u32>>,
     visited: &mut std::collections::HashSet<u32>,

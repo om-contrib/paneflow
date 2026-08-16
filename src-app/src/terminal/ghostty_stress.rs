@@ -11,7 +11,27 @@ use super::pty_session::SpawnParams;
 use super::types::{ShellQuoting, TerminalWindowSize};
 
 const CYCLES: usize = 200;
+#[cfg(not(target_os = "macos"))]
 const WARMUP_CYCLES: usize = 5;
+/// macOS needs a longer warmup before the resource baseline is meaningful.
+///
+/// Darwin's allocator returns freed pages to its own arenas rather than to the
+/// kernel, so the resident set climbs to a high-water mark over the first
+/// cycles whether or not anything leaks. Sampling the baseline before that
+/// plateau compares a cold process against a warm one and the 5% budget fails
+/// on allocator behaviour alone.
+///
+/// Measured on Apple Silicon, three consecutive runs: with 5 warmups the
+/// 200-cycle delta was reproducibly ~1.5 MB (~7%, over the 5% budget) while
+/// the descriptor count stayed flat at 3 - growth with no leak. The delta is
+/// already inside budget by 20 warmups. 40 is double the observed threshold,
+/// costing about four seconds, so a slower or more loaded machine does not
+/// turn this gate flaky.
+///
+/// Deliberately NOT fixed by widening the budget: the 5% rule is what makes
+/// this test able to catch a real leak, and the descriptor assertion shares it.
+#[cfg(target_os = "macos")]
+const WARMUP_CYCLES: usize = 40;
 #[cfg(target_os = "windows")]
 const PANES: usize = 32;
 // QG-007 fixes one release sample set at five warmups followed by 100
@@ -294,7 +314,7 @@ impl Drop for StressPane {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn cycle_spec() -> SpawnSpec {
     SpawnSpec {
         shell: "/bin/sh",
@@ -436,7 +456,7 @@ fn process_active(pid: u32) -> bool {
     wait != WAIT_OBJECT_0
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn process_active(pid: u32) -> bool {
     let Ok(pid) = i32::try_from(pid) else {
         return false;
@@ -519,6 +539,27 @@ fn descendant_pids(root_pid: u32) -> Vec<u32> {
 #[cfg(target_os = "linux")]
 fn descendant_pids(_root_pid: u32) -> Vec<u32> {
     Vec::new()
+}
+
+/// macOS descendants of `root_pid`, root excluded, matching the Windows shape.
+///
+/// Reuses the workspace process walker rather than adding a second policy
+/// (EP-003 US-006). Note `proc_listchildpids` is deliberately avoided: on
+/// modern macOS it reports zero children to an unprivileged caller, so the
+/// walker builds a parent map from `proc_bsdinfo.pbi_ppid` instead - see
+/// `workspace/ports.rs`. Using it here means a descendant-cleanup assertion
+/// that actually observes processes, unlike the Linux stub above.
+#[cfg(target_os = "macos")]
+fn descendant_pids(root_pid: u32) -> Vec<u32> {
+    use crate::workspace::{bfs_descendants_macos, macos_children_map};
+
+    let children_of = macos_children_map();
+    let mut visited = std::collections::HashSet::new();
+    let mut walked = bfs_descendants_macos(root_pid, &children_of, &mut visited);
+    if walked.first() == Some(&root_pid) {
+        walked.remove(0);
+    }
+    walked
 }
 
 #[cfg(target_os = "windows")]
@@ -750,6 +791,32 @@ fn resource_snapshot() -> ResourceSnapshot {
         handles: std::fs::read_dir("/proc/self/fd")
             .map(|entries| entries.count() as u64)
             .unwrap_or(0),
+        rss: super::backend_corpus::resident_set_bytes(),
+    }
+}
+
+/// macOS equivalent of the `/proc/self/fd` count.
+///
+/// Darwin has no procfs, so the open descriptors are listed through libproc -
+/// the same route `workspace/ports.rs` already uses. The ceiling is generous
+/// on purpose: the suite opens a PTY pair per pane and runs up to 32 panes,
+/// and a truncated count would understate growth and hide a descriptor leak,
+/// which is precisely what this snapshot exists to catch.
+#[cfg(target_os = "macos")]
+fn resource_snapshot() -> ResourceSnapshot {
+    use libproc::libproc::file_info::ListFDs;
+    use libproc::libproc::proc_pid::listpidinfo;
+
+    const MAX_TRACKED_FDS: usize = 8192;
+
+    // SAFETY: getpid is always safe and cannot fail.
+    let pid = unsafe { libc::getpid() };
+    let handles = listpidinfo::<ListFDs>(pid, MAX_TRACKED_FDS)
+        .map(|fds| fds.len() as u64)
+        .unwrap_or(0);
+
+    ResourceSnapshot {
+        handles,
         rss: super::backend_corpus::resident_set_bytes(),
     }
 }

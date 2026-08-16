@@ -19,14 +19,7 @@ readme = "../README.md"
 # that. Adding a platform means one arm there plus one feature here - not an
 # edit at ~170 call sites. Enforced by `tests/ghostty_cfg_policy.rs`.
 # (macOS libghostty EP-001 US-001.)
-# `libghostty-macos` is deliberately NOT in default yet. Enabling it compiles
-# the Ghostty session modules on macOS, which still reference POSIX helpers
-# gated to Linux (EP-003 US-005), and there is no reviewed macOS artifact to
-# link either. Until both land, a default macOS build must stay Alacritty-only
-# and green. Opt in with:
-#   PANEFLOW_LIBGHOSTTY_DIR=target/libghostty/aarch64-apple-darwin \
-#     cargo build -p paneflow-app --features libghostty-macos
-default = ["libghostty-linux", "libghostty-windows"]
+default = ["libghostty-linux", "libghostty-macos", "libghostty-windows"]
 # Linux-only backend backed by the pinned libghostty-vt archive. It is the
 # standard backend for cargo run, development builds, and official releases.
 # The target-specific dependencies keep it inert on macOS/Windows.
@@ -340,6 +333,14 @@ core-foundation = "0.10"
 raw-window-handle = "0.6"
 cocoa = "0.26"
 objc = "0.2"
+
+# The reviewed macOS Ghostty archive exists only for Apple Silicon. Pinning
+# these optional dependencies to that exact target lets `libghostty-macos`
+# stay enabled while an Intel Mac keeps compiling the Alacritty path - the
+# same shape as the Windows x64-MSVC entry below.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+paneflow-terminal-ghostty = { path = "../crates/paneflow-terminal-ghostty", optional = true }
+portable-pty = { version = "0.9.0", optional = true }
 
 # The verified Windows Ghostty archive exists only for x64 MSVC. Keeping these
 # optional dependencies on that exact target lets the default feature remain

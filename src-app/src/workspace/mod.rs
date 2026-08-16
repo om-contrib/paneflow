@@ -18,6 +18,12 @@ pub use git::{GitDiffStats, detect_branch, find_git_dir, resolve_repo_root};
 #[cfg(test)]
 pub(crate) use ports::PortEntry;
 pub use ports::{PaneScan, scan_panes};
+// The Ghostty stress suite asserts descendant cleanup through the same macOS
+// process walker the sidebar uses, rather than adding a second policy
+// (macOS libghostty EP-003 US-006). Gated to exactly the configuration that
+// consumes it so no unused re-export leaks into other builds.
+#[cfg(all(test, target_os = "macos", paneflow_ghostty))]
+pub(crate) use ports::{bfs_descendants_macos, macos_children_map};
 
 /// Hard cap on open workspaces (US-054: single source for the bound previously
 /// re-declared as a local `const` at every create/IPC site).
