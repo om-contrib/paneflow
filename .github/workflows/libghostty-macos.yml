@@ -1,0 +1,155 @@
+name: libghostty macOS
+
+# Native lane for the reviewed aarch64-apple-darwin libghostty-vt archive
+# (macOS libghostty EP-002). It rebuilds the artifact from the pinned Ghostty
+# source, proves the build is reproducible, and publishes the result plus its
+# metadata for review.
+#
+# It deliberately stops before the Cargo consumer steps: until the manifest
+# carries archive_sha256_aarch64_apple_darwin and the -sys crate has an Apple
+# TargetSpec (US-003), there is nothing for Cargo to link. The Linux and
+# Windows workflows keep owning their own targets.
+#
+# Runner note: this lane must stay on a runner image whose SDK still exports
+# the `arm64-macos` slice in usr/lib/libSystem.tbd. The macOS 26 SDK ships only
+# `arm64e-macos`, which Zig 0.15.2's Mach-O linker refuses to match, and Zig
+# compiles its own build runner against the host SDK before any project step.
+# macOS 15 images (Xcode 16.x, SDK 15.x) are known good. See
+# tasks/us-002-macos-zig-spike-findings.md before bumping the image.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/libghostty-macos.yml"
+      - "crates/paneflow-ghostty-smoke/**"
+      - "crates/paneflow-libghostty-sys/**"
+      - "crates/paneflow-terminal-ghostty/**"
+      - "native/libghostty/**"
+      - "scripts/*libghostty*"
+      - "src-app/Cargo.toml"
+      - "src-app/build.rs"
+      - "src-app/src/terminal/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/libghostty-macos.yml"
+      - "crates/paneflow-ghostty-smoke/**"
+      - "crates/paneflow-libghostty-sys/**"
+      - "crates/paneflow-terminal-ghostty/**"
+      - "native/libghostty/**"
+      - "scripts/*libghostty*"
+      - "src-app/Cargo.toml"
+      - "src-app/build.rs"
+      - "src-app/src/terminal/**"
+  schedule:
+    - cron: "37 1 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  GHOSTTY_SHA: ae52f97dcac558735cfa916ea3965f247e5c6e9e
+  ZIG_VERSION: 0.15.2
+  RUST_TARGET: aarch64-apple-darwin
+
+jobs:
+  native:
+    name: Reproducible native archive (aarch64-apple-darwin)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Checkout pinned Ghostty source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ghostty-org/ghostty
+          ref: ${{ env.GHOSTTY_SHA }}
+          path: .ghostty-source
+          fetch-depth: 1
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Record the toolchain this artifact is bound to
+        run: |
+          set -euo pipefail
+          echo "zig: $(zig version)"
+          echo "xcode-select: $(xcode-select -p)"
+          echo "sdk: $(xcrun --show-sdk-path)"
+          echo "sdk version: $(xcrun --show-sdk-version)"
+          # Load-bearing precondition, not decoration: without the arm64-macos
+          # slice Zig cannot link its own build runner and `zig build` fails
+          # before reaching any Ghostty step.
+          sdk_stub="$(xcrun --show-sdk-path)/usr/lib/libSystem.tbd"
+          if ! grep -q 'arm64-macos' "$sdk_stub"; then
+            echo "::error::$sdk_stub has no arm64-macos slice; Zig ${ZIG_VERSION} cannot link natively on this runner image. See tasks/us-002-macos-zig-spike-findings.md"
+            exit 1
+          fi
+
+      - name: Build the archive twice and prove it is reproducible
+        env:
+          PANEFLOW_GHOSTTY_SOURCE_DIR: ${{ github.workspace }}/.ghostty-source
+        run: |
+          scripts/build-libghostty-macos.sh \
+            --target "$RUST_TARGET" \
+            --verify-reproducible
+
+      - name: Attach provenance alongside the archive
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          cp .ghostty-source/build.zig.zon "$prepared/build.zig.zon"
+          shasum -a 256 "$prepared/build.zig.zon" > "$prepared/build.zig.zon.sha256"
+          cp native/libghostty/manifest.toml \
+             native/libghostty/THIRD_PARTY_NOTICES.md \
+             "$prepared/"
+
+      - name: Publish build metadata to the run summary
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          {
+            echo '## libghostty macOS native archive'
+            echo
+            echo 'Slice list, size and symbol inventory of the reviewed artifact.'
+            echo
+            echo '### build-info.txt'
+            echo '```'
+            cat "$prepared/build-info.txt"
+            echo '```'
+            echo
+            echo "- architecture: \`$(lipo -archs "$prepared/lib/libghostty-vt.a")\`"
+            echo "- size: $(wc -c < "$prepared/lib/libghostty-vt.a") bytes"
+            echo "- exported symbols: $(nm -g "$prepared/lib/libghostty-vt.a" | grep -cE '[[:space:]][A-TV-Z][[:space:]]_' || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce the manifest checksum once it is recorded
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          key="archive_sha256_aarch64_apple_darwin"
+          expected="$(sed -n "s/^${key} = \"\(.*\)\"$/\1/p" native/libghostty/manifest.toml)"
+          actual="$(sed -n 's/^archive_sha256=//p' "$prepared/build-info.txt")"
+          if [ -z "$expected" ]; then
+            echo "::notice::$key is not in the manifest yet (US-003). Rebuilt archive is $actual"
+            exit 0
+          fi
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::rebuilt archive is $actual but the manifest pins $expected"
+            exit 1
+          fi
+          echo "rebuilt archive matches the manifest: $actual"
+
+      - name: Upload prepared native input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: libghostty-native-aarch64-apple-darwin
+          path: target/libghostty/aarch64-apple-darwin
+          retention-days: 14

@@ -99,11 +99,20 @@
           "Ghostty clean checkout at ae52f97dcac558735cfa916ea3965f247e5c6e9e",
           "include/ghostty/vt.h matches header_sha256 in native/libghostty/manifest.toml"
         ],
-        "blocked_by_environment": [
-          "Zig 0.15.2 cannot link natively: the host is detected as macOS 27.0.0 while the newest installed SDK is 26.5, so libSystem.tbd declares no symbols for the target and all of libc resolves undefined. Proven with --verbose-link; not fixed by SDKROOT, DEVELOPER_DIR, MACOSX_DEPLOYMENT_TARGET or xcrun --kill-cache.",
-          "The pinned Ghostty build.zig calls LibCInstallation.findNative() unconditionally on Darwin (src/build/SharedDeps.zig:146 via GhosttyBench.init), so hiding the SDK to work around the first blocker is not viable either."
+        "reproducibility": {
+          "verdict": "REPRODUCIBLE",
+          "method": "scripts/build-libghostty-macos.sh --verify-reproducible: two builds from two clean Zig caches, archive/header/bindings/build-info compared with cmp",
+          "recipe": "apple-strip-S+zig-ar-D",
+          "zig_target": "aarch64-macos.13.0.0",
+          "local_archive_sha256": "31fcdfc6c8791baa45bfe4302dfd9b38a0019b9b8a0d5260f53102beea9b9c61",
+          "archive_bytes": 1816304,
+          "exported_symbols": 820,
+          "caveat": "Produced on a developer machine using an xcrun shim to reach SDK 15. Not the reviewed hash: strip comes from the host Xcode, so the manifest key must be filled from a CI run."
+        },
+        "environment_constraint": [
+          "Apple dropped the arm64-macos slice from libSystem.tbd in the macOS 26 SDK; MacOSX15.0.sdk has it, MacOSX26.5.sdk and MacOSX27.0.sdk do not. Zig 0.15.2's Mach-O linker matches the slice exactly, so it cannot link its own build runner against a 26+ SDK. The CI lane pins a macOS 15 runner image and asserts the slice before building."
         ],
-        "note": "Aucune archive produite, donc la question de reproductibilité qui motive US-002 reste ouverte. Deux résultats sont néanmoins acquis pour US-003: la cible de déploiement doit être épinglée dans le triple (aarch64-macos.13.0.0) plutôt qu'héritée de l'hôte, et zig ar / zig objcopy offrent un remplacement hermétique de eu-strip + ar -D."
+        "note": "La question centrale d'US-002 est répondue: l'archive est reproductible bit à bit. Reste à produire le hash reviewé sur CI avant de l'inscrire au manifest (US-003)."
       }
     },
     {

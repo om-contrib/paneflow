@@ -1,20 +1,24 @@
 # US-002 - macOS libghostty spike findings
 
 **PRD:** `tasks/prd-macos-libghostty-backend-2026-Q3.md` (EP-002 / US-002)
-**Date:** 2026-08-15
-**Status:** spike OPEN - reproducibility not yet measured, blocked before first successful build
+**Date:** 2026-08-15, updated 2026-08-16
+**Status:** spike ANSWERED - the archive is reproducible; the reviewed hash still has to come from CI
 
 ## Summary
 
-The pinned toolchain (Zig 0.15.2) could not produce a `libghostty-vt.a` for
-`aarch64-apple-darwin` on the development machine. Two independent obstacles
-were characterised; neither is caused by Paneflow code, and neither
-invalidates the US-002 plan. The reproducibility question the story exists to
-answer - can a Mach-O archive be normalised bit-for-bit without elfutils -
-remains **unanswered**, because no archive was produced.
+**The Mach-O archive is reproducible bit-for-bit.** Two builds from two clean
+Zig caches produced byte-identical archive, header, bindings and build-info
+under the recipe `apple-strip-S+zig-ar-D`. That was the go/no-go for the whole
+macOS project, and it is green.
 
-Two findings below are already actionable for US-003 regardless of how the
-blocker is resolved.
+Getting there required identifying why the pinned Zig 0.15.2 cannot build
+natively on a macOS 26+ SDK, and working around it locally. The root cause is
+narrow and is documented below, because it constrains which CI runner image
+this lane may use.
+
+The hash produced locally is **not** the reviewed hash: it must be reproduced
+on a clean CI runner before being written into the manifest, since `strip`
+comes from the host Xcode and its version is part of the recipe.
 
 ## Environment
 
@@ -112,6 +116,43 @@ usable Darwin SDK.
 The two blockers are mutually exclusive under the current host/SDK pair: the
 build runner needs the SDK hidden, Ghostty needs it visible.
 
+## Result - the reproducible recipe
+
+`scripts/build-libghostty-macos.sh --verify-reproducible` passes. Recorded
+`build-info.txt` from the local run:
+
+```
+source_sha=ae52f97dcac558735cfa916ea3965f247e5c6e9e
+zig_version=0.15.2
+rust_target=aarch64-apple-darwin
+zig_target=aarch64-macos.13.0.0
+optimize=ReleaseFast
+archive_normalization=apple-strip-S+zig-ar-D
+macos_deployment_target=13.0.0
+archive_sha256=31fcdfc6c8791baa45bfe4302dfd9b38a0019b9b8a0d5260f53102beea9b9c61
+```
+
+Archive: `arm64`, 1 816 304 bytes, 820 exported symbols, down from 7.5 MB
+before stripping.
+
+Three things the recipe had to get right, each found by running it rather than
+by reasoning about it:
+
+1. **`zig objcopy` cannot be used.** It only handles ELF and fails on Mach-O
+   with `invalid elf file: InvalidElfMagic`. Apple's `strip -S` does the job.
+   Linux also strips with a host tool (`eu-strip`), so this is not a loss of
+   hermeticity relative to the existing recipe.
+2. **Stripping is required, not cosmetic.** Zig bakes absolute cache paths into
+   the objects: 3 occurrences in `vt.o`, 5 in `libghostty-vt-static_zcu.o`.
+   Without the strip, two builds from different cache directories cannot match.
+   `strip -S` removes all of them.
+3. **Archive members are stored with mode `000`.** `ar x` restores them
+   unreadable, so every later step fails with `AccessDenied` until the script
+   restores owner read/write after extraction.
+
+`lipo -archs` is the architecture check, not `file`: on a static library `file`
+only ever reports `current ar archive`.
+
 ## Findings already usable for US-003
 
 1. **The deployment target must be pinned in the triple, not inherited.**
@@ -130,20 +171,58 @@ build runner needs the SDK hidden, Ghostty needs it visible.
 
 ## Options
 
+The `arm64-macos` slice is present in `MacOSX15.0.sdk` and absent from both
+`MacOSX26.5.sdk` and `MacOSX27.0.sdk`, so Apple dropped it in the macOS 26 SDK.
+Two consequences:
+
+- **CI is fine.** A macOS 15 runner image (Xcode 16.x, SDK 15.x) still exports
+  the slice. `libghostty-macos.yml` asserts this explicitly before building, so
+  a future runner-image bump fails loudly instead of mysteriously.
+- **Local builds need a shim** on any machine whose newest SDK is 26+.
+
+## Local workaround for a macOS 26+ / beta machine
+
+Zig resolves the SDK through `xcrun --show-sdk-path`. Putting an `xcrun` ahead
+of it on `PATH` that answers with an SDK 15 path makes the native build runner
+link again, with no change to system state and no `sudo`:
+
+```sh
+mkdir -p /tmp/zig-sdk-shim
+cat > /tmp/zig-sdk-shim/xcrun <<'EOF'
+#!/bin/sh
+SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX15.0.sdk
+for arg in "$@"; do
+  case "$arg" in
+    --show-sdk-path) echo "$SDK"; exit 0 ;;
+    --show-sdk-version) echo "15.0"; exit 0 ;;
+  esac
+done
+exec /usr/bin/xcrun "$@"
+EOF
+chmod +x /tmp/zig-sdk-shim/xcrun
+
+PATH="/tmp/zig-sdk-shim:$PATH" \
+PANEFLOW_GHOSTTY_SOURCE_DIR=/path/to/ghostty \
+  scripts/build-libghostty-macos.sh --verify-reproducible
+```
+
+This is a developer convenience only. It must never appear in the repo recipe
+or in CI: the reviewed artifact has to be built against a real, declared SDK.
+
+## Options for the reviewed hash
+
 | Option | Effect | Cost |
 |---|---|---|
-| Produce the artifact on CI (`libghostty-macos.yml`, US-012) | GitHub's macOS runners pair a stable macOS with an Xcode whose SDK still carries the `arm64-macos` slice. This is where the reviewed artifact must be produced anyway, for provenance | Reorders US-012 before US-002 closes; slower feedback while tuning the normalisation recipe |
-| Wait for the machine to leave the macOS 27 beta, then re-test | The slice list may return, or a newer Xcode may ship one Zig 0.15.2 accepts | Unknown date, and unverified that it changes anything |
-| Bump the pinned Zig | A newer Zig may match `arm64e` slices or fall back to its bundled stub | Invalidates every hash on all three platforms and is an explicit PRD Non-Goal |
+| Take the hash from a CI run of `libghostty-macos.yml` | The reviewed artifact is produced where its provenance is verifiable, on a declared runner image and Xcode | One CI run before US-003 can record the manifest key |
+| Take the hash from a local shimmed build | Immediate | Rejected: `strip` comes from the developer's Xcode, and the SDK is being faked. Not reviewable provenance |
+| Bump the pinned Zig | A newer Zig may match `arm64e` slices | Invalidates every hash on all three platforms and is an explicit PRD Non-Goal |
 
-Recommended: **CI**. An Xcode upgrade is not an option - the machine runs a
-macOS 27 beta and Xcode 27 does not exist. And the local blocker is the slice
-list, which is identical in both SDKs already installed, so a newer Xcode is
-not known to help.
-
-Nothing in EP-003 through EP-006 depends on producing this artifact locally
-except the stories that link it. US-001 is already done, and the host-port
-design work can proceed against the Linux and Windows implementations.
+Recommended: run `libghostty-macos.yml` once, read `archive_sha256` from the
+run summary, and record it as `archive_sha256_aarch64_apple_darwin` in US-003.
+If the CI hash differs from the local one, that difference is itself worth
+understanding before the key is written - the artifact build is a
+cross-compilation that should not depend on the host SDK, so only the `strip`
+version should be able to move it.
 
 ## Reproduction
 
