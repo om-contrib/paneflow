@@ -23,10 +23,10 @@
     {
       "id": "EP-002",
       "title": "Établir la fondation native aarch64-apple-darwin",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "priority": "P0",
       "stories_total": 3,
-      "stories_done": 1
+      "stories_done": 3
     },
     {
       "id": "EP-003",
@@ -112,21 +112,21 @@
       "id": "US-003",
       "title": "Distribuer l’artefact macOS de façon hermétique",
       "epic": "EP-002",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "priority": "P0",
       "size": "L",
       "blocked_by": [],
       "started_at": "2026-08-16",
+      "completed_at": "2026-08-16",
       "verification": {
         "done": [
           "scripts/build-libghostty-macos.sh reproduit l'archive depuis un checkout propre du SHA épinglé",
           "crate -sys: NativePlatform::Macos, TargetSpec, zig_target composé depuis le manifest, match plateforme explicite à trois branches",
-          "artefact reviewé versé sous native/libghostty/prebuilt/aarch64-apple-darwin/",
-          "un checkout standard compile et lie sans Zig, sans source Ghostty et sans réseau"
+          "artefact reviewé versé sous native/libghostty/prebuilt/aarch64-apple-darwin/, adopté depuis le runner CI et non depuis une machine de développement",
+          "archive_sha256_aarch64_apple_darwin = c489cd43aa82c26f11d6af1f6b49854f883161f6999f8111598d8f95e1b96ed0, re-dérivé et confirmé par le job « Reproducible native archive (aarch64-apple-darwin) » sur la PR #1",
+          "un checkout standard compile et lie sans Zig, sans source Ghostty et sans réseau: job « Cargo gates against the repository artifact » vert"
         ],
-        "remaining": [
-          "archive_sha256_aarch64_apple_darwin est PROVISIONAL: il doit être re-dérivé par un run de libghostty-macos.yml avant d'être considéré reviewé"
-        ]
+        "ci_evidence": "PR #1, workflow « libghostty macOS »: job natif, job consommateur et validation-summary tous verts."
       }
     },
     {
