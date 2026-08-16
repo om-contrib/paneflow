@@ -93,11 +93,21 @@ fork GPUI épinglée. Le PRD interdit explicitement de bumper GPUI (Non-Goal 7),
 et le faire à l'intérieur d'un port de plateforme mélangerait deux sujets à
 risque très différents.
 
-**Piste :** vérifier si une version corrigée de Wasmtime est atteignable par
-`cargo update -p wasmtime` sans bouger la révision GPUI. Sinon, soit relever
-la fork Zed, soit ajouter une exception datée et justifiée dans `deny.toml` le
-temps que l'amont bouge. Deux avertissements `yanked` sur `spin` traînent
-aussi dans le même run et méritent le même passage.
+**Correctif disponible, non appliqué ici.** `cargo update -p wasmtime
+--dry-run` propose **36.0.10 → 36.0.13**, un bump de patch dans la même
+version mineure, qui ne touche que `Cargo.lock` et laisse la révision GPUI
+épinglée intacte. Le Non-Goal 7 du PRD interdit de bumper GPUI, pas de mettre
+à jour une entrée transitive du lockfile : la correction est donc légitime,
+mais elle relève d'un changement supply-chain à part entière et n'a rien à
+faire dans un portage de plateforme.
+
+Avant de l'appliquer, confirmer que 36.0.13 est bien dans la plage corrigée de
+l'avis RUSTSEC-2026-0222, puis relancer `cargo deny check`. Deux
+avertissements `yanked` sur `spin` traînent dans le même run et méritent le
+même passage.
+
+Tant que ce n'est pas fait, le check « Security Audit » reste rouge sur toute
+PR, celle-ci comprise.
 
 ---
 
