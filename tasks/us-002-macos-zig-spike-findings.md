@@ -29,36 +29,61 @@ blocker is resolved.
 Provenance inputs are therefore confirmed good. The failure is toolchain/host,
 not source.
 
-## Blocker 1 - Zig 0.15.2 cannot link natively against the available SDK
+## Blocker 1 - Zig 0.15.2's Mach-O linker cannot consume the current Apple SDK on arm64
 
-Every native link fails with the whole of libc undefined (`_abort`, `_bzero`,
-`_getenv`, `_sigaction`, `__availability_version_check`, …). `--verbose-link`
-gives the mechanism:
+Every **native** link fails with the whole of libc undefined (`_abort`,
+`_bzero`, `_getenv`, `_sigaction`, `__availability_version_check`, …).
+
+The cause is not the OS/SDK version gap. It is the target slice list in the
+SDK's text stub. Both SDKs on the machine declare:
+
+```yaml
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, x86_64-maccatalyst, arm64e-macos, arm64e-maccatalyst ]
+```
+
+`arm64e-macos` is present, plain **`arm64-macos` is not**. Zig targets
+`aarch64-macos` (= `arm64-macos`), its Mach-O linker matches the slice exactly,
+finds nothing, and reports every symbol undefined. Apple's own `ld` tolerates
+this; Zig 0.15.2 does not. Verified on both
+`Xcode.app/.../MacOSX26.5.sdk` and `CommandLineTools/SDKs/MacOSX27.0.sdk`.
+
+`--verbose-link` shows the two regimes clearly:
 
 ```
+# native - uses the Apple SDK, fails
 zig ld -dynamic -platform_version macos 27.0.0 26.5 \
   -syslibroot /Applications/Xcode.app/.../MacOSX26.5.sdk -lSystem ...
+
+# explicit target - no -syslibroot at all, uses Zig's bundled stub, succeeds
+zig ld -dynamic -platform_version macos 13.0.0 15.5 -e _main ... -lSystem
 ```
 
-Zig detects the host as macOS **27.0.0** and links against the SDK **26.5**
-`libSystem.tbd`. The stub declares no symbols for a macOS 27 target, so Zig's
-target filter discards all of them. The SDK is older than the OS it runs on.
+So an explicit target in the triple puts Zig in cross-compilation mode, where
+it ignores the system SDK and uses its own
+`lib/libc/darwin/libSystem.tbd` - which does carry the `arm64-macos` slice.
 
-This is not a cache, a `SDKROOT`, or an `xcode-select` problem. Measured:
+Measured:
 
 | Configuration | Result |
 |---|---|
 | native, Xcode SDK 26.5 | fail |
-| native, `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX15.0.sdk` | fail - `SDKROOT` is not honoured, `--verbose-link` shows Zig still selects 26.5 |
-| native, `DEVELOPER_DIR=/Library/Developer/CommandLineTools` (SDK 27.0) | fail |
+| native, `SDKROOT=…/MacOSX15.0.sdk` | fail - `SDKROOT` is not honoured, `--verbose-link` shows Zig still selects 26.5 |
+| native, `DEVELOPER_DIR=/Library/Developer/CommandLineTools` (SDK 27.0) | fail - same slice list |
 | native, `MACOSX_DEPLOYMENT_TARGET=13.0` | fail - not honoured |
-| `-target aarch64-macos` with `DEVELOPER_DIR=/nonexistent`, using Zig's bundled `lib/libc/darwin/libSystem.tbd` | **links, binary runs** |
-| `-target aarch64-macos.13.0.0`, SDK present | **links** |
+| native, `SYSTEM_VERSION_COMPAT=1` | fail - Zig still reports host 27.0.0 |
+| `-target aarch64-macos` with `DEVELOPER_DIR=/nonexistent` | **links, binary runs** |
+| `-target aarch64-macos.13.0.0`, SDK present | **links** - no `-syslibroot` emitted |
 
-An explicit deployment target in the triple fixes the artifact build. It does
-**not** fix the build runner: `zig build` always compiles `build.zig` itself
-for the native host, and `-Dtarget` does not apply to it. So `zig build` fails
-before reaching any Ghostty step.
+This fixes the artifact build but **not the build runner**: `zig build`
+compiles `build.zig` itself for the native host, and `-Dtarget` does not apply
+to it. `zig build` therefore fails before reaching any Ghostty step - even
+`zig build --help` fails.
+
+Note the machine runs a macOS 27 **beta**, so Xcode 27 does not exist yet and
+Xcode 26.5 is the correct current release. The blocker is not a misconfigured
+machine, and updating Xcode cannot resolve it today.
 
 `xcrun --kill-cache` was required once, unrelated to this: after
 `xcode-select -s`, `xcrun --show-sdk-path` kept returning a stale
@@ -107,13 +132,18 @@ build runner needs the SDK hidden, Ghostty needs it visible.
 
 | Option | Effect | Cost |
 |---|---|---|
-| Install an Xcode whose SDK is at least the host macOS version | Most likely clears both blockers at once; matched SDK/OS is what CI runners have | An Xcode upgrade on the dev machine |
-| Produce the artifact only on CI (`libghostty-macos.yml`, US-012) | Where the reviewed artifact will be built for real anyway; local builds stay optional | Reorders US-012 before US-002 closes; slow feedback on the normalisation recipe |
-| Bump the pinned Zig | Would likely support the current SDK | Invalidates every hash on all three platforms and is an explicit PRD Non-Goal |
+| Produce the artifact on CI (`libghostty-macos.yml`, US-012) | GitHub's macOS runners pair a stable macOS with an Xcode whose SDK still carries the `arm64-macos` slice. This is where the reviewed artifact must be produced anyway, for provenance | Reorders US-012 before US-002 closes; slower feedback while tuning the normalisation recipe |
+| Wait for the machine to leave the macOS 27 beta, then re-test | The slice list may return, or a newer Xcode may ship one Zig 0.15.2 accepts | Unknown date, and unverified that it changes anything |
+| Bump the pinned Zig | A newer Zig may match `arm64e` slices or fall back to its bundled stub | Invalidates every hash on all three platforms and is an explicit PRD Non-Goal |
 
-Recommended: try the Xcode upgrade first, since it is the cheapest and also
-unblocks whichever future story needs a native build. Fall back to CI-only
-production if the SDK/OS gap persists.
+Recommended: **CI**. An Xcode upgrade is not an option - the machine runs a
+macOS 27 beta and Xcode 27 does not exist. And the local blocker is the slice
+list, which is identical in both SDKs already installed, so a newer Xcode is
+not known to help.
+
+Nothing in EP-003 through EP-006 depends on producing this artifact locally
+except the stories that link it. US-001 is already done, and the host-port
+design work can proceed against the Linux and Windows implementations.
 
 ## Reproduction
 
