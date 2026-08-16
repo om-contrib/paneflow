@@ -156,7 +156,30 @@ En cas d'échec sur `phase=resources`, lire les deux chiffres avant de conclure
 
 ---
 
-## 8. Limites connues
+## 8. Budgets mesurés
+
+| Budget | Cible | Mesuré | Verdict |
+|---|---|---|---|
+| NFR-004 taille binaire | ≤ 15 MiB de surcoût | +1,43 MiB (64 325 312 contre 62 828 224 octets) | tenu |
+| NFR-006 lifecycle | 200 cycles et 32 panes, zéro deadlock, double-spawn ou orphelin | les trois campagnes passent | tenu |
+| NFR-007 récupération | descripteurs et RSS à moins de 5 % de la référence | descripteurs stables, RSS dans le budget après stabilisation | tenu |
+| NFR-002 débit, NFR-003 P95 création | ≤ 10 % de régression, P95 < 500 ms | non mesuré | exige un runner contrôlé |
+
+Reproduire la mesure de taille :
+
+```bash
+cargo build --release --locked -p paneflow-app
+cp target/release/paneflow /tmp/paneflow-ghostty
+cargo build --release --locked -p paneflow-app --no-default-features
+stat -f %z /tmp/paneflow-ghostty target/release/paneflow
+```
+
+Le profil release active déjà `strip = true`, donc les deux binaires sont
+comparables directement.
+
+---
+
+## 9. Limites connues
 
 - Apple Silicon uniquement. Aucun artefact `x86_64-apple-darwin` n'est publié.
 - macOS 13 est le plancher, épinglé dans le triple Zig

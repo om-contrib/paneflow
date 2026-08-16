@@ -293,7 +293,8 @@
       ],
       "verification": {
         "done": [
-          "Budgets de ressources (NFR-006, NFR-007) exécutés et verts via les trois campagnes de stress"
+          "Budgets de ressources (NFR-006, NFR-007) exécutés et verts via les trois campagnes de stress",
+          "NFR-004 taille binaire: build release Ghostty 64 325 312 octets contre 62 828 224 pour le build --no-default-features, soit +1 497 088 octets = 1,43 MiB. Budget 15 MiB, tenu avec un facteur 10 de marge."
         ],
         "remaining": [
           "Comparaison de débit Ghostty vs Alacritty et P95 de création de host: exigent un runner contrôlé, pas une machine de développement chargée"
@@ -313,7 +314,8 @@
       ],
       "verification": {
         "done": [
-          "Linkage statique prouvé: otool -L sur le binaire release ne liste que libiconv et libSystem, aucun dylib Ghostty. Assertion reprise dans le lane CI."
+          "Linkage statique prouvé: otool -L sur le binaire release paneflow ne liste aucun dylib Ghostty. Assertion reprise dans le lane CI.",
+          "Le binaire release complet de l'application se construit sur macOS avec le backend Ghostty (61,3 Mo)."
         ],
         "remaining": [
           "Signature, hardened runtime, notarisation, stapling et cask Homebrew: exigent les identifiants Apple et l'infrastructure de release, hors de portée d'une session de développement"
