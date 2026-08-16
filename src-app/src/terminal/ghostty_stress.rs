@@ -893,13 +893,32 @@ fn resource_snapshot() -> ResourceSnapshot {
 
     // SAFETY: getpid is always safe and cannot fail.
     let pid = unsafe { libc::getpid() };
-    let handles = listpidinfo::<ListFDs>(pid, MAX_TRACKED_FDS)
-        .map(|fds| fds.len() as u64)
-        .unwrap_or(0);
+    let fds = listpidinfo::<ListFDs>(pid, MAX_TRACKED_FDS)
+        .unwrap_or_else(|error| panic!("cannot list this process's descriptors: {error}"));
+
+    // A silently truncated list is worse than no list: the count would stop
+    // growing exactly when a descriptor leak got interesting, and the campaign
+    // would report a flat handle count while leaking. Treat saturation as a
+    // measurement failure, not as a reading.
+    assert!(
+        fds.len() < MAX_TRACKED_FDS,
+        "descriptor listing hit its {MAX_TRACKED_FDS} cap, so the count is truncated \
+         and cannot be compared against a baseline; raise the cap",
+    );
+
+    let rss = super::backend_corpus::resident_set_bytes();
+    // Zero is not a plausible resident set for a live process. It would mean
+    // the task-info query failed, and would make every RSS budget below pass
+    // for the wrong reason.
+    assert!(
+        rss > 0,
+        "resident set read as 0: the macOS task-info query failed, so the \
+         resource budgets would be meaningless",
+    );
 
     ResourceSnapshot {
-        handles,
-        rss: super::backend_corpus::resident_set_bytes(),
+        handles: fds.len() as u64,
+        rss,
     }
 }
 
