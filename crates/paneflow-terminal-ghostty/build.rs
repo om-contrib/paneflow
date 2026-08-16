@@ -12,6 +12,10 @@
 //! whether the `-sys` crate exists at all, this cfg decides whether the code
 //! using it is compiled.
 
+// Build scripts idiomatically `panic!` on fatal errors; the workspace
+// `clippy::panic = "deny"` policy targets runtime code, not build tooling.
+#![allow(clippy::panic)]
+
 fn main() {
     // Required so `unexpected_cfgs` accepts the custom cfg without a blanket
     // `#[allow]` at the crate root.
@@ -21,8 +25,11 @@ fn main() {
         return;
     }
 
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    // Never default these: an empty string would make every arm below false
+    // and silently drop the native engine in favour of the stub, with no
+    // diagnostic anywhere. Cargo always sets both.
+    let target_os = cargo_cfg("CARGO_CFG_TARGET_OS");
+    let target_arch = cargo_cfg("CARGO_CFG_TARGET_ARCH");
 
     // macOS is Apple Silicon only: releases ship no Intel artifact, and
     // narrowing here is what keeps an Intel Mac building Alacritty-only
@@ -33,4 +40,9 @@ fn main() {
     if supported {
         println!("cargo:rustc-cfg=paneflow_ghostty_native");
     }
+}
+
+fn cargo_cfg(key: &str) -> String {
+    std::env::var(key)
+        .unwrap_or_else(|error| panic!("cargo always sets {key} for build scripts: {error}"))
 }

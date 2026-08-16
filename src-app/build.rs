@@ -232,11 +232,20 @@ fn emit_ghostty_backend_cfg() {
     }
 }
 
-/// Read a `CARGO_CFG_*` variable, defaulting to empty when Cargo does not
-/// set it for this target (e.g. `CARGO_CFG_TARGET_ENV` is empty on some
-/// targets rather than absent).
+/// Read a `CARGO_CFG_*` variable that Cargo is guaranteed to set for every
+/// target.
+///
+/// Defaulting to an empty string here would be the worst possible failure
+/// mode: every arm of the predicate would silently evaluate to false and the
+/// Ghostty backend would vanish from the build with no diagnostic. Fail the
+/// build instead.
+///
+/// `CARGO_CFG_TARGET_ENV` is the one exception - it is legitimately the empty
+/// string on targets without an environment component (Darwin among them),
+/// but Cargo still *sets* it, so `var` succeeds and returns `""`.
 fn cargo_cfg(key: &str) -> String {
-    std::env::var(key).unwrap_or_default()
+    std::env::var(key)
+        .unwrap_or_else(|error| panic!("cargo always sets {key} for build scripts: {error}"))
 }
 
 /// Invoke a child `cargo build` against the workspace to produce the

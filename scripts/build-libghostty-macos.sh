@@ -152,19 +152,29 @@ normalize_archive() {
   (
     cd "$normalize_dir" || exit 1
     zig ar x "$archive" || exit 1
-    # Members are stored with mode 000, so `ar x` restores them unreadable and
-    # every later step fails with AccessDenied. Restore owner read/write before
-    # touching them.
-    chmod u+rw ./*.o || exit 1
-    # Zig bakes absolute cache paths into the objects' debug data. Dropping it
-    # is what makes two builds from different cache dirs comparable; measured,
-    # not assumed. `zig objcopy` is not usable here - it only handles ELF.
+    # Read the canonical order into an array. `xargs` would be shorter but can
+    # split a long list across several `ar` invocations, silently rebuilding
+    # the archive from a subset. bash 3.2 (the macOS system shell) has no
+    # `mapfile`, hence the explicit loop.
+    ordered=()
     while IFS= read -r member; do
-      [[ -f "$member" ]] || exit 1
-      strip -S "$member" || exit 1
+      [[ -n "$member" ]] || continue
+      ordered+=("$member")
     done < "$sorted_file"
+    ((${#ordered[@]} > 0)) || { echo "archive has no members" >&2; exit 1; }
+
+    for member in "${ordered[@]}"; do
+      [[ -f "$member" ]] || { echo "archive member vanished: $member" >&2; exit 1; }
+      # Members are stored with mode 000, so `ar x` restores them unreadable
+      # and every later step fails with AccessDenied.
+      chmod u+rw "$member" || exit 1
+      # Zig bakes absolute cache paths into the objects' debug data. Dropping
+      # it is what makes two builds from different cache dirs comparable;
+      # measured, not assumed. `zig objcopy` cannot do this - it only reads ELF.
+      strip -S "$member" || exit 1
+    done
     # `D` is llvm-ar's deterministic mode: zero mtime, uid, gid and mode.
-    xargs zig ar crsD "$normalized" < "$sorted_file" || exit 1
+    zig ar crsD "$normalized" "${ordered[@]}" || exit 1
   ) || {
     local status=$?
     rm -rf "$normalize_dir" "$normalized"

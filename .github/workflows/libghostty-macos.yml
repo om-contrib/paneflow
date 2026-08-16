@@ -81,9 +81,18 @@ jobs:
         run: |
           set -euo pipefail
           echo "zig: $(zig version)"
+          echo "runner arch: $(uname -m)"
           echo "xcode-select: $(xcode-select -p)"
           echo "sdk: $(xcrun --show-sdk-path)"
           echo "sdk version: $(xcrun --show-sdk-version)"
+          # The reviewed artifact must be produced by a native Apple Silicon
+          # build. An Intel image would still succeed - Zig would cross-compile
+          # to arm64 - but from a different toolchain path, so the bytes would
+          # not be comparable with what this lane is supposed to certify.
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "::error::runner is $(uname -m); this lane requires an Apple Silicon image"
+            exit 1
+          fi
           # Load-bearing precondition, not decoration: without the arm64-macos
           # slice Zig cannot link its own build runner and `zig build` fails
           # before reaching any Ghostty step.

@@ -1,5 +1,23 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+//! `paneflow_ghostty_native` (emitted by `build.rs`) means: the `native`
+//! feature is on **and** this target has a reviewed libghostty-vt archive, so
+//! the real engine is compiled instead of `stub`. Never re-derive that
+//! disjunction at a use site - adding a platform must stay a one-place change
+//! (macOS libghostty EP-001 US-001).
+
+// The cfg is computed in build.rs from the same target inputs that decide
+// whether the `-sys` crate is a dependency at all (the target-specific table
+// in Cargo.toml). Those two must agree. If the cfg is set while the crate is
+// absent the failure is loud - unresolved imports - but the opposite drift is
+// silent: the stub would be compiled while the archive is linked in, and the
+// terminal would quietly do nothing. Pin the invariant here.
+#[cfg(all(paneflow_ghostty_native, not(feature = "native")))]
+compile_error!(
+    "`paneflow_ghostty_native` is set without the `native` feature: \
+     crates/paneflow-terminal-ghostty/build.rs and Cargo.toml have diverged"
+);
+
 #[cfg(paneflow_ghostty_native)]
 mod encode;
 #[cfg(all(test, paneflow_ghostty_native))]
