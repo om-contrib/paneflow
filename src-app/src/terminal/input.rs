@@ -1469,6 +1469,53 @@ mod tests {
         assert_eq!(input.text, "@");
     }
 
+    /// EP-004 US-009 - the macOS Option convention, pinned in both settings.
+    ///
+    /// On macOS Option composes Unicode (Option+e then e gives é), so treating
+    /// it as Meta corrupts ordinary typing. `option_as_meta` therefore defaults
+    /// off there and on everywhere else.
+    ///
+    /// The routing decision is deliberately backend-independent: both the
+    /// Alacritty and Ghostty paths ask `key_escape_sequence` first, and only a
+    /// mapped sequence is re-encoded through Ghostty. Pinning the decision here
+    /// covers both backends at once, which is what "same result as Alacritty
+    /// for the equivalent configuration" means in practice.
+    #[test]
+    fn option_as_meta_gates_printable_keys_but_never_navigation() {
+        let mode = Modes::default();
+
+        // Printable + Option. With the macOS default the keystroke must fall
+        // through to the IME/character path (None) so the composed character
+        // survives; with Option-as-Meta it becomes an ESC-prefixed sequence.
+        let printable = gpui::Keystroke::parse("alt-e").unwrap();
+        assert!(
+            super::key_escape_sequence(&printable, &mode, false, false).is_none(),
+            "Option+e must reach the character path when option_as_meta is off, \
+             otherwise composing é is impossible on a Mac keyboard",
+        );
+        assert!(
+            super::key_escape_sequence(&printable, &mode, true, false).is_some(),
+            "Option+e must produce a Meta sequence when option_as_meta is on",
+        );
+
+        // Navigation keys report physical Alt regardless of the toggle, so
+        // Alt+Left keeps working for a user who turned Option-as-Meta off.
+        let navigation = gpui::Keystroke::parse("alt-left").unwrap();
+        for option_as_meta in [false, true] {
+            assert!(
+                super::key_escape_sequence(&navigation, &mode, option_as_meta, false).is_some(),
+                "Alt+Left must stay mapped with option_as_meta={option_as_meta}",
+            );
+        }
+
+        // The platform default is what makes the above matter.
+        assert_eq!(
+            crate::keys::default_option_as_meta(),
+            !cfg!(target_os = "macos"),
+            "Option-as-Meta must default off on macOS and on elsewhere",
+        );
+    }
+
     #[test]
     fn character_preferred_altgr_bypasses_control_escape_routing() {
         let keystroke = gpui::Keystroke::parse("ctrl-alt-q").unwrap();

@@ -4227,6 +4227,110 @@ mod tests {
         let _ = child.wait();
     }
 
+    /// EP-004 US-011 / QG-010 - every shell in the macOS matrix drives a real
+    /// Ghostty session end to end.
+    ///
+    /// zsh is the macOS default and always present; bash ships with the OS;
+    /// fish and nushell are common but optional. An absent optional shell is
+    /// reported as an explicit skip rather than a silent pass, which is what
+    /// the PRD asks for - a matrix that quietly tests nothing is worse than a
+    /// failing one.
+    ///
+    /// Each shell must launch, inherit the environment Paneflow set, emit its
+    /// marker through libghostty, and exit exactly once with status 0.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_shell_matrix_reaches_exit_through_ghostty() {
+        const MARKER: &str = "PANEFLOW_SHELL_OK";
+
+        // `-c` plus a single command is the one invocation form all four
+        // accept, so the matrix does not drift into per-shell scripting.
+        let shells = [
+            ("zsh", true),
+            ("bash", true),
+            ("fish", false),
+            ("nu", false),
+        ];
+
+        let mut exercised = 0usize;
+        for (shell_name, required) in shells {
+            let Ok(shell_path) = which::which(shell_name) else {
+                assert!(
+                    !required,
+                    "{shell_name} must be present on macOS but was not found on PATH",
+                );
+                println!("skip shell={shell_name} reason=not_installed");
+                continue;
+            };
+
+            let params = SpawnParams {
+                shell: shell_path.to_string_lossy().into_owned(),
+                shell_quoting: super::super::types::ShellQuoting::Posix,
+                extra_args: vec!["-c".into(), format!("echo {MARKER}-{shell_name}; exit 0")],
+                env: std::collections::HashMap::from([
+                    ("TERM".into(), "xterm-256color".into()),
+                    ("COLORTERM".into(), "truecolor".into()),
+                    ("TERM_PROGRAM".into(), "paneflow".into()),
+                ]),
+                cwd: std::env::current_dir().expect("cwd"),
+                cols: 80,
+                rows: 24,
+                profile: TerminalSurfaceProfile::Normal,
+                surface_id: 900 + exercised as u64,
+            };
+
+            let (session, pending, mut events_rx) =
+                GhosttySession::pending(TerminalWindowSize::new(80, 24, 8, 16));
+            let spawned = session
+                .start(pending, params, None, 1_000)
+                .unwrap_or_else(|error| panic!("shell={shell_name} phase=start error={error:?}"));
+            assert!(spawned.child_pid > 0, "shell={shell_name} phase=pid");
+            session.promote();
+
+            let deadline = Instant::now() + Duration::from_secs(8);
+            let mut exits = 0usize;
+            let mut exit_code = -1;
+            let mut runtime_failures = Vec::new();
+            while Instant::now() < deadline && exits == 0 {
+                while let Ok(event) = events_rx.try_recv() {
+                    match event {
+                        GhosttyUiEvent::ChildExited { code, .. } => {
+                            exits += 1;
+                            exit_code = code;
+                        }
+                        GhosttyUiEvent::RuntimeFailed(error) => runtime_failures.push(error),
+                        _ => {}
+                    }
+                }
+                if exits == 0 {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+
+            assert!(
+                runtime_failures.is_empty(),
+                "shell={shell_name} phase=runtime failures={runtime_failures:?}",
+            );
+            assert_eq!(exits, 1, "shell={shell_name} phase=exit_count");
+            assert_eq!(exit_code, 0, "shell={shell_name} phase=exit_code");
+            assert!(
+                session
+                    .recent_output_lines()
+                    .iter()
+                    .any(|line| line.contains(MARKER)),
+                "shell={shell_name} phase=marker: libghostty did not surface the shell's output",
+            );
+
+            session.shutdown();
+            exercised += 1;
+        }
+
+        assert!(
+            exercised >= 2,
+            "the mandatory macOS shells (zsh, bash) must both have been exercised",
+        );
+    }
+
     #[test]
     fn live_runtime_runs_platform_shell_and_reports_one_exit() {
         let cwd = std::env::current_dir().unwrap();
