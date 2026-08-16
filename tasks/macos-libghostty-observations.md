@@ -66,6 +66,44 @@ libghostty. Toucher `CLAUDE.md` pour ça mélangerait des sujets.
 
 ---
 
+## OBS-006 - Le digest de l'image openSUSE Tumbleweed a disparu du registre
+
+**Sévérité :** moyenne (fait échouer `Package smoke (opensuse)` et, par
+agrégation, `libghostty validation` sur toute PR)
+**Statut :** OPEN
+**Découvert :** 2026-08-16, run CI de la PR #1
+
+`.github/workflows/libghostty-linux.yml:370` épingle :
+
+```
+registry.opensuse.org/opensuse/tumbleweed:latest@sha256:362c1e2f5a2313e3d1e8713d28e06d13ee7f5a68399f8f86ffa1aa8a2a320c43
+```
+
+Le job n'atteint jamais son code : il échoue au `docker pull`, trois fois de
+suite après retry.
+
+```
+Error response from daemon: manifest unknown
+```
+
+Tumbleweed est une rolling release et son registre récupère les anciens
+digests. Le digest épinglé n'existe simplement plus en amont. Les quatre
+autres distributions du même matrix — arch, debian, fedora, ubuntu — passent,
+ce qui confirme que le smoke lui-même va bien.
+
+**Sans lien avec ce chantier :** `git diff main...HEAD` ne touche pas
+`libghostty-linux.yml`. Cet échec se produirait sur n'importe quelle PR
+ouverte aujourd'hui, et se produira à chaque purge du registre.
+
+**Piste :** re-épingler sur un digest courant. Mais épingler par digest une
+image rolling garantit que le problème revient : soit accepter un tag mobile
+pour cette entrée précise du matrix (au prix de la reproductibilité), soit
+basculer sur une image openSUSE Leap, versionnée et stable, dont les digests
+ne sont pas purgés. La seconde option semble préférable — le but du job est de
+vérifier l'installation d'un RPM, pas de suivre le dernier Tumbleweed.
+
+---
+
 ## OBS-005 - `cargo-deny` échoue sur RUSTSEC-2026-0222 (Wasmtime)
 
 **Sévérité :** haute (bloque le check « Security Audit » sur toute PR)
