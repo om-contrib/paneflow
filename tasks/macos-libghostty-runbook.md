@@ -143,16 +143,36 @@ cargo test -p paneflow-app macos_ghostty_lifecycle_scenario_matrix_is_bounded --
 cargo test -p paneflow-app macos_ghostty_32_pane_resize_and_close_orders_are_bounded -- --ignored
 ```
 
-En cas d'échec sur `phase=resources`, lire les deux chiffres avant de conclure
-à une fuite :
+Ce que chaque campagne assère, et pourquoi ce n'est pas identique :
 
-- `handles_start` vs `handles_end` — une divergence est une **vraie** fuite de
-  descripteurs, sans ambiguïté.
-- `rss_start` vs `rss_end` — l'allocateur Darwin ne rend pas ses pages au
-  noyau. Une croissance dont les incréments **décroissent** d'une campagne à
-  l'autre est un plateau ; une croissance à incrément **constant** est une
-  fuite. Les campagnes chauffent jusqu'à stabilisation avant de mesurer,
-  précisément pour que ce signal reste lisible.
+| Campagne | Descripteurs | Mémoire résidente |
+|---|---|---|
+| 200 cycles | assérée | **assérée**, budget 5 % |
+| 32 panes | assérée | **reportée, non assérée** |
+| Matrice lifecycle | via reap des processus | sans objet |
+
+La mémoire n'est pas assérée à l'échelle de 32 panes sur Darwin parce qu'elle
+n'y est pas mesurable de façon fiable : l'allocateur garde ses pages, et le
+point haut atteint varie de plusieurs Mo d'un run à l'autre (35,4 / 38,7 /
+42,9 Mo observés pour le même code). Chauffer jusqu'au plateau a été essayé
+puis abandonné — les incréments sont bruités et non monotones, et le gate
+restait intermittent. Un gate intermittent est pire qu'absent : il apprend à
+relancer jusqu'au vert, ce qui est précisément ainsi qu'une vraie régression
+passe.
+
+La couverture n'est pas perdue : la campagne à 200 cycles exerce le même
+chemin spawn/resize/teardown deux cents fois, contre une référence à un seul
+pane qui, elle, est stable, et y applique le budget complet.
+
+En cas d'échec :
+
+- `phase=descriptors` — une divergence est une **vraie** fuite, sans
+  ambiguïté. C'est le signal le plus fiable dont on dispose sur Darwin.
+- `phase=resources` sur la campagne 200 cycles — la référence y est stable,
+  donc une croissance hors budget mérite une vraie investigation.
+- La ligne `macos_ghostty_32_panes_rss` est informative. Une valeur qui grimpe
+  régulièrement d'un run à l'autre vaut un coup d'œil manuel même si elle ne
+  bloque rien.
 
 ---
 
@@ -162,7 +182,7 @@ En cas d'échec sur `phase=resources`, lire les deux chiffres avant de conclure
 |---|---|---|---|
 | NFR-004 taille binaire | ≤ 15 MiB de surcoût | +1,43 MiB (64 325 312 contre 62 828 224 octets) | tenu |
 | NFR-006 lifecycle | 200 cycles et 32 panes, zéro deadlock, double-spawn ou orphelin | les trois campagnes passent | tenu |
-| NFR-007 récupération | descripteurs et RSS à moins de 5 % de la référence | descripteurs stables, RSS dans le budget après stabilisation | tenu |
+| NFR-007 récupération | descripteurs et RSS à moins de 5 % de la référence | descripteurs stables partout ; RSS dans le budget sur la campagne 200 cycles, non mesurable de façon fiable à 32 panes (voir §7) | tenu, avec une limite documentée |
 | NFR-002 débit, NFR-003 P95 création | ≤ 10 % de régression, P95 < 500 ms | non mesuré | exige un runner contrôlé |
 
 Reproduire la mesure de taille :
