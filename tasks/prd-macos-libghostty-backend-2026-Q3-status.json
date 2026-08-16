@@ -119,12 +119,27 @@
       "id": "US-003",
       "title": "Distribuer l’artefact macOS de façon hermétique",
       "epic": "EP-002",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "priority": "P0",
       "size": "L",
       "blocked_by": [
         "US-002"
-      ]
+      ],
+      "started_at": "2026-08-16",
+      "verification": {
+        "done": [
+          "scripts/build-libghostty-macos.sh reproduces the archive from a clean pinned checkout",
+          "-sys crate links aarch64-apple-darwin: NativePlatform::Macos, TargetSpec, manifest-composed zig_target, explicit three-way platform match",
+          "wrapper crate compiles and its 54 tests pass against the real archive via PANEFLOW_LIBGHOSTTY_DIR",
+          "paneflow-ghostty-smoke passes on macOS: real PTY, /bin/sh, feed, resize, snapshot marker, child reaped"
+        ],
+        "remaining": [
+          "archive_sha256_aarch64_apple_darwin is not in the manifest: the reviewed hash must come from a CI run of libghostty-macos.yml",
+          "native/libghostty/prebuilt/aarch64-apple-darwin/ does not exist yet, so a standard checkout cannot link without PANEFLOW_LIBGHOSTTY_DIR",
+          "libghostty-macos is kept out of default features until EP-003 US-005 widens the POSIX host gates"
+        ],
+        "note": "Le moteur tourne sur macOS et est prouvé par le smoke headless. Il reste la distribution hermétique proprement dite (artefact reviewé committé + hash au manifest), qui dépend d'un run CI."
+      }
     },
     {
       "id": "US-004",
