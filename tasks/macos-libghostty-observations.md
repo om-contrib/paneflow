@@ -66,6 +66,41 @@ libghostty. Toucher `CLAUDE.md` pour ça mélangerait des sujets.
 
 ---
 
+## OBS-005 - `cargo-deny` échoue sur RUSTSEC-2026-0222 (Wasmtime)
+
+**Sévérité :** haute (bloque le check « Security Audit » sur toute PR)
+**Statut :** OPEN
+**Découvert :** 2026-08-16, premier run CI de la PR #1
+
+Le job `Security Audit (cargo-deny)` de `run_tests.yml` échoue :
+
+```
+error[vulnerability]: Stores can mix up type indices between engines
+├ ID: RUSTSEC-2026-0222
+├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0222
+```
+
+Wasmtime est une dépendance transitive de GPUI (host d'extensions). L'avis a
+été publié dans la base RustSec après le dernier run vert ; rien dans le code
+Paneflow ne l'a déclenché.
+
+**Sans lien avec ce chantier**, et vérifiable : `git diff main...HEAD` ne
+touche pas `Cargo.lock` et ne contient aucune occurrence de `wasmtime`. Le
+check échouerait à l'identique sur n'importe quelle PR ouverte aujourd'hui.
+
+**Hors périmètre :** corriger revient à relever Wasmtime, qui arrive par la
+fork GPUI épinglée. Le PRD interdit explicitement de bumper GPUI (Non-Goal 7),
+et le faire à l'intérieur d'un port de plateforme mélangerait deux sujets à
+risque très différents.
+
+**Piste :** vérifier si une version corrigée de Wasmtime est atteignable par
+`cargo update -p wasmtime` sans bouger la révision GPUI. Sinon, soit relever
+la fork Zed, soit ajouter une exception datée et justifiée dans `deny.toml` le
+temps que l'amont bouge. Deux avertissements `yanked` sur `spin` traînent
+aussi dans le même run et méritent le même passage.
+
+---
+
 ## OBS-004 - Sur POSIX, `shutdown()` d'un enfant vivant ne publie jamais `ChildExited`
 
 **Sévérité :** moyenne

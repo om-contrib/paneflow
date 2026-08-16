@@ -16,6 +16,12 @@ name: libghostty macOS
 # compiles its own build runner against the host SDK before any project step.
 # macOS 15 images (Xcode 16.x, SDK 15.x) are known good. See
 # tasks/us-002-macos-zig-spike-findings.md before bumping the image.
+#
+# `run_tests.yml` pins macos-14 for cost reasons on a job that runs on every
+# PR. This lane is path-filtered and far rarer, so it takes the newer image to
+# stay closer to what users run - but it is the SDK slice, not the image
+# number, that actually constrains the choice, and the first step asserts it
+# rather than trusting the label.
 
 on:
   push:
@@ -139,6 +145,19 @@ jobs:
             echo "- exported symbols: $(nm -g "$prepared/lib/libghostty-vt.a" | grep -cE '[[:space:]][A-TV-Z][[:space:]]_' || true)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Uploaded BEFORE the checksum gate, and with `if: always()`, on purpose.
+      # A checksum mismatch is precisely when the rebuilt archive is the thing
+      # you need in hand - to inspect it, or to adopt it as the reviewed one.
+      # Publishing after the gate meant the first real mismatch produced an
+      # error message and no artifact at all.
+      - name: Upload prepared native input
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: libghostty-native-aarch64-apple-darwin
+          path: target/libghostty/aarch64-apple-darwin
+          retention-days: 14
+
       - name: Enforce the manifest checksum once it is recorded
         run: |
           set -euo pipefail
@@ -155,13 +174,6 @@ jobs:
             exit 1
           fi
           echo "rebuilt archive matches the manifest: $actual"
-
-      - name: Upload prepared native input
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: libghostty-native-aarch64-apple-darwin
-          path: target/libghostty/aarch64-apple-darwin
-          retention-days: 14
 
   consumer:
     # Deliberately independent of `native`: this job must prove that a standard
