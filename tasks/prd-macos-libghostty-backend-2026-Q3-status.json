@@ -15,10 +15,10 @@
     {
       "id": "EP-001",
       "title": "Unifier les gates de compilation du backend Ghostty",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "priority": "P0",
       "stories_total": 1,
-      "stories_done": 0
+      "stories_done": 1
     },
     {
       "id": "EP-002",
@@ -66,7 +66,8 @@
       "id": "US-001",
       "title": "Introduire l’alias cfg unique du backend Ghostty",
       "epic": "EP-001",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
+      "completed_at": "2026-08-16",
       "priority": "P0",
       "size": "M",
       "blocked_by": [],
@@ -81,10 +82,8 @@
           "cargo test --workspace --locked",
           "tests/ghostty_cfg_policy.rs, avec contrôle négatif qui échoue comme attendu"
         ],
-        "local_gates_blocked": [
-          "QG-002 neutralité Linux et Windows: ne peut pas être produite sur une machine Apple Silicon, nécessite la matrice CI sur le commit candidat."
-        ],
-        "note": "Deux garde-fous compile_error! empêchent l'alias et les features de diverger silencieusement. Reste QG-002."
+        "ci_evidence": "QG-002 est vert sur la PR #1: Tests (Linux x86_64), Linux aarch64, Native/tests/release/package sur les deux architectures Linux, Windows x86_64 libghostty check, Windows aarch64 check-only, Rebuild pinned native archive, Regenerated bindings and ABI, Fuzz parser et snapshot, et les render smokes visuels macOS et Windows.",
+        "note": "Deux garde-fous compile_error! empêchent l'alias et les features de diverger silencieusement. La neutralité Linux/Windows du refactor, seule preuve manquante, est désormais fournie par la CI."
       }
     },
     {
