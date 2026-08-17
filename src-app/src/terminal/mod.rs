@@ -8,6 +8,7 @@
 pub(crate) mod backend_corpus;
 pub mod blink;
 pub mod element;
+pub(crate) mod frame_probe;
 #[cfg(any(
     all(target_os = "linux", feature = "libghostty-linux"),
     all(

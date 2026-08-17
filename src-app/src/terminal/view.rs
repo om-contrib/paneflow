@@ -924,6 +924,11 @@ impl TerminalView {
                     }
 
                     let mut batch_window_elapsed = false;
+                    // Armed by PANEFLOW_FRAME_PROBE=1 only. The window below is
+                    // nominally 4ms, but it is the platform timer that decides
+                    // when it actually closes - measure rather than assume.
+                    let batch_window_opened_at =
+                        crate::terminal::frame_probe::enabled().then(std::time::Instant::now);
                     {
                         let timer = futures::FutureExt::fuse(smol::Timer::after(
                             std::time::Duration::from_millis(4),
@@ -951,6 +956,12 @@ impl TerminalView {
                                 },
                             }
                         }
+                    }
+                    if let Some(opened_at) = batch_window_opened_at {
+                        crate::terminal::frame_probe::record_batch_window(
+                            opened_at.elapsed(),
+                            batch_window_elapsed,
+                        );
                     }
                     if batch_window_elapsed {
                         immediate_ghostty_wakeup_burst_active = false;
