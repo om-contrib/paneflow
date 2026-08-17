@@ -68,6 +68,7 @@ mod widgets;
 mod window_chrome;
 mod window_state;
 mod windows_app_identity;
+mod windows_timer;
 mod workspace;
 
 use crate::window_chrome::title_bar;
@@ -2913,6 +2914,12 @@ fn main() {
     if let Err(err) = windows_app_identity::ensure_process_app_user_model_id() {
         log::warn!("paneflow: Windows app identity setup failed: {err}");
     }
+
+    // The terminal render path coalesces backend wakeups behind a 4 ms window,
+    // which on Windows is only as precise as the process timer period. Hold
+    // 1 ms for the whole GUI lifetime so that window closes when it says it
+    // will instead of drifting to the next 15.6 ms tick. Inert elsewhere.
+    let _timer_resolution = windows_timer::boost_timer_resolution();
 
     application()
         .with_assets(assets::Assets)
