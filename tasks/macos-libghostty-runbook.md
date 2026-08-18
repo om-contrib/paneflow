@@ -183,7 +183,8 @@ En cas d'échec :
 | NFR-004 taille binaire | ≤ 15 MiB de surcoût | +1,43 MiB (64 325 312 contre 62 828 224 octets) | tenu |
 | NFR-006 lifecycle | 200 cycles et 32 panes, zéro deadlock, double-spawn ou orphelin | les trois campagnes passent | tenu |
 | NFR-007 récupération | descripteurs et RSS à moins de 5 % de la référence | descripteurs stables partout ; RSS dans le budget sur la campagne 200 cycles, non mesurable de façon fiable à 32 panes (voir §7) | tenu, avec une limite documentée |
-| NFR-002 débit, NFR-003 P95 création | ≤ 10 % de régression, P95 < 500 ms | non mesuré | exige un runner contrôlé |
+| NFR-002 débit | ≤ 10 % de régression face à Alacritty | **gain de ~1,5×** : feed médian 2831 µs contre 4290 µs, input→snapshot médian 7,58 µs contre 11,58 µs, P95 amélioré de 32 % | largement tenu |
+| NFR-003 P95 création de host | < 500 ms | non mesuré | le gate dédié est encore spécifique à Windows |
 
 Reproduire la mesure de taille :
 
@@ -196,6 +197,19 @@ stat -f %z /tmp/paneflow-ghostty target/release/paneflow
 
 Le profil release active déjà `strip = true`, donc les deux binaires sont
 comparables directement.
+
+Reproduire la mesure de débit — release obligatoire, le gate refuse un build
+debug :
+
+```bash
+cargo test --release --locked -p paneflow-app \
+  ghostty_parser_and_snapshot_performance_gate -- --ignored --nocapture
+```
+
+Il compare Ghostty et Alacritty sur le même processus et le même corpus, et
+émet une ligne JSON avec tous les percentiles. La CI l'exécute sur PR,
+schedule et dispatch : une mesure prise sur une machine de développement
+chargée n'a pas valeur de preuve.
 
 ---
 

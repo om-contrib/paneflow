@@ -5,10 +5,10 @@ name: libghostty macOS
 # source, proves the build is reproducible, and publishes the result plus its
 # metadata for review.
 #
-# It deliberately stops before the Cargo consumer steps: until the manifest
-# carries archive_sha256_aarch64_apple_darwin and the -sys crate has an Apple
-# TargetSpec (US-003), there is nothing for Cargo to link. The Linux and
-# Windows workflows keep owning their own targets.
+# A second, deliberately independent job then proves a standard checkout builds
+# and tests against that reviewed artifact with no Zig, no Ghostty source and
+# no network - which is what a contributor actually gets. The Linux and Windows
+# workflows keep owning their own targets.
 #
 # Runner note: this lane must stay on a runner image whose SDK still exports
 # the `arm64-macos` slice in usr/lib/libSystem.tbd. The macOS 26 SDK ships only
@@ -226,6 +226,20 @@ jobs:
             -- --ignored --nocapture
           cargo test --locked -p paneflow-app \
             macos_ghostty_32_pane_resize_and_close_orders_are_bounded \
+            -- --ignored --nocapture
+
+      - name: Parser and snapshot performance gate
+        # Release-only, and pointedly not run on a developer machine: the
+        # comparison is against Alacritty on the same runner, so a loaded
+        # laptop would produce a number nobody should trust. Same trigger set
+        # as the lifecycle gates.
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          cargo test --release --locked -p paneflow-app \
+            ghostty_parser_and_snapshot_performance_gate \
             -- --ignored --nocapture
 
       - name: Confirm nothing links a Ghostty dylib
