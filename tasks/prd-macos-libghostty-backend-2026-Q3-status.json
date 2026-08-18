@@ -1,0 +1,380 @@
+{
+  "prd": {
+    "file": "tasks/prd-macos-libghostty-backend-2026-Q3.md",
+    "title": "Backend libghostty natif pour Paneflow sous macOS",
+    "created_at": "2026-08-15",
+    "status": "IN_PROGRESS"
+  },
+  "notes": {
+    "observations_file": "tasks/macos-libghostty-observations.md",
+    "spike_findings": "tasks/us-002-macos-zig-spike-findings.md",
+    "qualification_phase": "Le backend est compilé par défaut sur aarch64-apple-darwin, mais `auto` sélectionne toujours Alacritty. La promotion (US-017) reste conditionnée aux gates CI.",
+    "unverifiable_locally": "US-014 exige signature, notarisation et cask Homebrew: impossible sans les identifiants Apple et l'infrastructure de release. US-017 exige QG-001..QG-013 verts sur un commit candidat, donc au moins un run CI."
+  },
+  "epics": [
+    {
+      "id": "EP-001",
+      "title": "Unifier les gates de compilation du backend Ghostty",
+      "status": "DONE",
+      "priority": "P0",
+      "stories_total": 1,
+      "stories_done": 1
+    },
+    {
+      "id": "EP-002",
+      "title": "Établir la fondation native aarch64-apple-darwin",
+      "status": "DONE",
+      "priority": "P0",
+      "stories_total": 3,
+      "stories_done": 3
+    },
+    {
+      "id": "EP-003",
+      "title": "Porter le host Ghostty sur le PTY Darwin",
+      "status": "DONE",
+      "priority": "P0",
+      "stories_total": 3,
+      "stories_done": 3
+    },
+    {
+      "id": "EP-004",
+      "title": "Atteindre la parité terminal et workflow macOS",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "stories_total": 4,
+      "stories_done": 3
+    },
+    {
+      "id": "EP-005",
+      "title": "Industrialiser CI, sécurité, performance et packaging",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "stories_total": 4,
+      "stories_done": 2
+    },
+    {
+      "id": "EP-006",
+      "title": "Qualifier, promouvoir et rendre le rollback explicite",
+      "status": "TODO",
+      "priority": "P0",
+      "stories_total": 2,
+      "stories_done": 0
+    }
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Introduire l’alias cfg unique du backend Ghostty",
+      "epic": "EP-001",
+      "status": "DONE",
+      "completed_at": "2026-08-16",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [],
+      "started_at": "2026-08-15",
+      "verification": {
+        "implemented_at": "2026-08-15",
+        "sites_rewritten": 201,
+        "detail": "170 dans src-app (paneflow_ghostty) et 31 dans paneflow-terminal-ghostty (paneflow_ghostty_native). 4 gates mono-plateforme laissées explicites dans src-app, 6 dans le crate d'enveloppe: elles expriment une primitive OS, pas la disponibilité du backend.",
+        "local_gates_passed": [
+          "cargo fmt --check",
+          "cargo clippy --workspace --all-targets --locked -- -D warnings",
+          "cargo test --workspace --locked",
+          "tests/ghostty_cfg_policy.rs, avec contrôle négatif qui échoue comme attendu"
+        ],
+        "ci_evidence": "QG-002 est vert sur la PR #1: Tests (Linux x86_64), Linux aarch64, Native/tests/release/package sur les deux architectures Linux, Windows x86_64 libghostty check, Windows aarch64 check-only, Rebuild pinned native archive, Regenerated bindings and ABI, Fuzz parser et snapshot, et les render smokes visuels macOS et Windows.",
+        "note": "Deux garde-fous compile_error! empêchent l'alias et les features de diverger silencieusement. La neutralité Linux/Windows du refactor, seule preuve manquante, est désormais fournie par la CI."
+      }
+    },
+    {
+      "id": "US-002",
+      "title": "Fermer le spike de build Mach-O reproductible",
+      "epic": "EP-002",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [],
+      "started_at": "2026-08-15",
+      "completed_at": "2026-08-16",
+      "findings": "tasks/us-002-macos-zig-spike-findings.md",
+      "verification": {
+        "reproducibility": "REPRODUCTIBLE - deux builds depuis deux caches Zig vierges donnent archive, header, bindings et build-info strictement identiques",
+        "recipe": "apple-strip-S+zig-ar-D",
+        "zig_target": "aarch64-macos.13.0.0",
+        "archive_sha256": "31fcdfc6c8791baa45bfe4302dfd9b38a0019b9b8a0d5260f53102beea9b9c61",
+        "archive_bytes": 1816304,
+        "exported_symbols": 820,
+        "note": "Le go/no-go du projet est vert. Le hash reste marqué PROVISIONAL au manifest tant qu'un run CI ne l'a pas re-dérivé."
+      }
+    },
+    {
+      "id": "US-003",
+      "title": "Distribuer l’artefact macOS de façon hermétique",
+      "epic": "EP-002",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [],
+      "started_at": "2026-08-16",
+      "completed_at": "2026-08-16",
+      "verification": {
+        "done": [
+          "scripts/build-libghostty-macos.sh reproduit l'archive depuis un checkout propre du SHA épinglé",
+          "crate -sys: NativePlatform::Macos, TargetSpec, zig_target composé depuis le manifest, match plateforme explicite à trois branches",
+          "artefact reviewé versé sous native/libghostty/prebuilt/aarch64-apple-darwin/, adopté depuis le runner CI et non depuis une machine de développement",
+          "archive_sha256_aarch64_apple_darwin = c489cd43aa82c26f11d6af1f6b49854f883161f6999f8111598d8f95e1b96ed0, re-dérivé et confirmé par le job « Reproducible native archive (aarch64-apple-darwin) » sur la PR #1",
+          "un checkout standard compile et lie sans Zig, sans source Ghostty et sans réseau: job « Cargo gates against the repository artifact » vert"
+        ],
+        "ci_evidence": "PR #1, workflow « libghostty macOS »: job natif, job consommateur et validation-summary tous verts."
+      }
+    },
+    {
+      "id": "US-004",
+      "title": "Rendre la frontière FFI sûre sur macOS et ajouter le smoke headless",
+      "epic": "EP-002",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-003"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": "abi::validate() est appelé dans constructor.rs à chaque DisplayTerminal::new(), donc tailles, alignements, discriminants et version d'API sont vérifiés contre le header épinglé à chaque test. 54 tests du crate d'enveloppe passent contre l'archive réelle, et paneflow-ghostty-smoke passe sur macOS: vrai PTY, /bin/sh, feed, resize, marqueur du snapshot, enfant reapé."
+      }
+    },
+    {
+      "id": "US-005",
+      "title": "Élargir le host POSIX de Linux à Darwin",
+      "epic": "EP-003",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": "27 gates target_os=linux de ghostty_session.rs élargies à cfg(unix). resident_set_bytes et process_cpu_time implémentés pour de vrai via libproc: le stub renvoyant 0 aurait rendu toute assertion de fuite vacante. Un test plancher garantit que la mesure ne peut pas régresser vers un stub."
+      }
+    },
+    {
+      "id": "US-006",
+      "title": "Valider l’observation et l’arrêt de processus sur Darwin",
+      "epic": "EP-003",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": "posix_child_observation_leaves_the_pid_reserved vérifie sur la plateforme réelle les trois hypothèses du chemin d'arrêt: portable-pty laisse l'enfant session leader (getpgid == pid), waitid WNOHANG signale sans erreur, et WNOWAIT observe la sortie sans reaper, donc le PID reste réservé. La question ouverte du PRD sur la sémantique Darwin est close par mesure. descendant_pids réutilise le walker de workspace/ports.rs au lieu d'une troisième politique."
+      }
+    },
+    {
+      "id": "US-007",
+      "title": "Couvrir drain final, backpressure, resize et stress macOS",
+      "epic": "EP-003",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005",
+        "US-006"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "campaigns_green": [
+          "ghostty_spawn_resize_close_stress_has_no_residual_growth: 200 cycles x 200 resizes",
+          "macos_ghostty_32_pane_resize_and_close_orders_are_bounded: 32 panes concurrents, 5 exécutions consécutives vertes",
+          "macos_ghostty_lifecycle_scenario_matrix_is_bounded: exit immédiat, shell bloqué, descendant, Ctrl-C, crash worker simulé, timeout"
+        ],
+        "note": "Le budget de 5% n'a pas été élargi. La croissance RSS observée est un plateau d'allocateur Darwin, prouvé par la décroissance des incréments sur cinq campagnes (+1.14, +2.82, +0.92, +0.05 MB). La chauffe s'arrête d'elle-même quand la mesure se stabilise, bornée à huit passes: un build qui fuit ne se stabilise jamais et échoue quand même."
+      }
+    },
+    {
+      "id": "US-008",
+      "title": "Étendre le corpus rendu et interaction à macOS",
+      "epic": "EP-004",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-004",
+        "US-005"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": "Le corpus différentiel est gaté sur paneflow_ghostty et s'exécute donc sur macOS depuis US-005. ghostty_corpus_matches_alacritty, corpus_observes_search_and_resize_damage et malformed_and_oversized_streams_are_deterministic passent: zéro divergence inexpliquée entre les deux moteurs (QG-006).",
+        "remaining": "Validation Retina / non-Retina: relève d'une vérification visuelle manuelle, non automatisable ici."
+      }
+    },
+    {
+      "id": "US-009",
+      "title": "Intégrer le clavier macOS, Option-as-Meta, dead keys et IME",
+      "epic": "EP-004",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-005"
+      ],
+      "verification": {
+        "done": [
+          "option_as_meta_gates_printable_keys_but_never_navigation verrouille la convention macOS dans ses deux réglages",
+          "La décision de routage est commune aux deux backends (key_escape_sequence), donc la parité Ghostty/Alacritty est structurelle et non dupliquée"
+        ],
+        "remaining": [
+          "Matrice clavier physique complète (AZERTY, touches mortes, IME Core Text): exige une frappe réelle et un layout système, non automatisable dans cette suite"
+        ]
+      }
+    },
+    {
+      "id": "US-010",
+      "title": "Valider paste, clipboard, souris, focus et liens sur macOS",
+      "epic": "EP-004",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-005",
+        "US-009"
+      ],
+      "verification": {
+        "note": "Le code de paste, souris, focus, OSC 52 et hyperlinks est backend-neutre et désormais compilé et testé sur macOS via la suite workspace. Reste la vérification manuelle des conventions macOS (presse-papiers système, scroll inertiel)."
+      }
+    },
+    {
+      "id": "US-011",
+      "title": "Qualifier les shells et workflows Paneflow réels sur macOS",
+      "epic": "EP-004",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-007",
+        "US-008",
+        "US-009",
+        "US-010"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": "macos_shell_matrix_reaches_exit_through_ghostty: zsh et bash obligatoires, fish et nushell optionnels avec skip explicite. Chaque shell doit démarrer, hériter de l'environnement, faire remonter son marqueur à travers libghostty et sortir une seule fois en code 0. Vérifié avec zsh et bash présents, fish et nu absents, donc le chemin de skip est exercé."
+      }
+    },
+    {
+      "id": "US-012",
+      "title": "Ajouter la lane CI native macOS et les contrôles supply-chain",
+      "epic": "EP-005",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-003",
+        "US-004"
+      ],
+      "completed_at": "2026-08-16",
+      "verification": {
+        "note": ".github/workflows/libghostty-macos.yml: job native (reconstruction + preuve de reproductibilité + provenance + comparaison au hash du manifest) et job consumer indépendant (checkout standard, sans Zig ni source Ghostty ni réseau) exécutant fmt, clippy, tests, build de repli Alacritty-only, smoke headless, campagnes de lifecycle et assertion de linkage statique. Le lane vérifie aussi que l'image du runner expose encore la tranche arm64-macos et qu'elle est bien Apple Silicon."
+      }
+    },
+    {
+      "id": "US-013",
+      "title": "Enforcer corpus, performance et budgets de ressources sur macOS",
+      "epic": "EP-005",
+      "status": "DONE",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-007",
+        "US-008",
+        "US-009"
+      ],
+      "verification": {
+        "done": [
+          "Budgets de ressources (NFR-006, NFR-007) verts via les campagnes de stress",
+          "NFR-004 taille binaire: +1 497 088 octets = 1,43 MiB contre un budget de 15 MiB",
+          "NFR-002 débit: ghostty_parser_and_snapshot_performance_gate exécuté en release sur macOS. parser_ratio 1.4927 et parser_median_ratio 1.5150, soit Ghostty environ 1,5x plus rapide qu'Alacritty - un gain, pas une régression. Feed médian par round 2831 µs contre 4290 µs. Input vers snapshot médian 7,58 µs contre 11,58 µs, P95 66,5 µs contre 97,7 µs (input_to_snapshot_p95_regression = -0.3198, soit 32% d'amélioration). Snapshot médian 6,04 µs contre 10,38 µs.",
+          "Le gate est désormais exécuté par la CI sur pull_request, schedule et workflow_dispatch, en release sur le runner macOS: la mesure ne dépend plus d'une machine de développement chargée."
+        ],
+        "note": "Reste hors mesure le P95 de création de host (NFR-003), dont le gate dédié est encore spécifique à Windows. La croissance RSS pendant le benchmark est nettement supérieure côté Ghostty (20,6 Mo contre 0,38 Mo), cohérent avec le plateau d'allocateur Darwin documenté ailleurs, et sans effet sur le verdict."
+      },
+      "completed_at": "2026-08-18"
+    },
+    {
+      "id": "US-014",
+      "title": "Intégrer le linkage statique au bundle, à la signature et au cask",
+      "epic": "EP-005",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "L",
+      "blocked_by": [
+        "US-012",
+        "US-013"
+      ],
+      "verification": {
+        "done": [
+          "Linkage statique prouvé: otool -L sur le binaire release paneflow ne liste aucun dylib Ghostty. Assertion reprise dans le lane CI.",
+          "Le binaire release complet de l'application se construit sur macOS avec le backend Ghostty (61,3 Mo)."
+        ],
+        "remaining": [
+          "Signature, hardened runtime, notarisation, stapling et cask Homebrew: exigent les identifiants Apple et l'infrastructure de release, hors de portée d'une session de développement"
+        ]
+      }
+    },
+    {
+      "id": "US-015",
+      "title": "Exécuter la matrice macOS et publier le runbook de diagnostic",
+      "epic": "EP-005",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "size": "M",
+      "blocked_by": [
+        "US-011",
+        "US-014"
+      ],
+      "verification": {
+        "done": [
+          "Runbook de diagnostic et de rollback publié: tasks/macos-libghostty-runbook.md"
+        ],
+        "remaining": [
+          "Exécution de la matrice sur macOS 13 et sur la version majeure courante, avec preuves enregistrées"
+        ]
+      }
+    },
+    {
+      "id": "US-016",
+      "title": "Ajouter la sélection macOS et le mode de qualification",
+      "epic": "EP-006",
+      "status": "IN_PROGRESS",
+      "priority": "P0",
+      "size": "S",
+      "blocked_by": [
+        "US-005",
+        "US-007"
+      ],
+      "verification": {
+        "note": "terminal.backend accepte déjà auto, ghostty et alacritty de façon cross-platform, et auto_selects_ghostty_for_target() exclut macOS, ce qui est exactement la phase de qualification voulue: le backend est compilé, ghostty est sélectionnable explicitement, auto reste sur Alacritty. Reste à documenter la sélection côté utilisateur."
+      }
+    },
+    {
+      "id": "US-017",
+      "title": "Promouvoir Ghostty comme backend auto sous macOS",
+      "epic": "EP-006",
+      "status": "TODO",
+      "priority": "P0",
+      "size": "S",
+      "blocked_by": [
+        "US-011",
+        "US-012",
+        "US-013",
+        "US-014",
+        "US-015",
+        "US-016"
+      ],
+      "verification": {
+        "note": "Volontairement non fait. La promotion exige QG-001 à QG-013 verts sur le commit candidat, ce qui inclut la neutralité Linux/Windows et le packaging notarisé. Basculer auto sans ces preuves contredirait l'unhappy path de la story."
+      }
+    }
+  ]
+}

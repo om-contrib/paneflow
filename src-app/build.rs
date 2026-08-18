@@ -49,6 +49,11 @@
 //!    fast iteration on the main crate when the nested binaries have not
 //!    changed. The staging dir must still be populated when the `Bins`
 //!    `RustEmbed` macro expands - rust-embed 8.x panics on missing folders.
+//!
+//! 3. **macOS libghostty EP-001 US-001 - `paneflow_ghostty` cfg alias.**
+//!    Emit a single `cfg` expressing "the native libghostty-vt backend is
+//!    linked into this build", so source code never re-derives the
+//!    target/feature disjunction. See `emit_ghostty_backend_cfg`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -82,7 +87,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=POSTHOG_HOST");
     println!("cargo:rerun-if-env-changed=PANEFLOW_SKIP_EMBED_BUILD");
 
-    // 2. US-008 - stage the AI-hook binaries into a dir that
+    // 2. macOS libghostty EP-001 US-001 - single source of truth for
+    //    "is the native Ghostty backend linked into this build".
+    emit_ghostty_backend_cfg();
+
+    // 3. US-008 - stage the AI-hook binaries into a dir that
     //    `assets::Bins` (rust-embed) will ingest.
     let target = std::env::var("TARGET").expect("cargo always sets TARGET for build scripts");
     // Expose the triple to source code via `env!("PANEFLOW_TARGET_TRIPLE")`
@@ -165,6 +174,78 @@ fn main() {
     // Whether the nested build ran or not, enforce the size budget so a
     // pre-populated staging dir also honors the PRD cap.
     enforce_embed_size_budget(&embed_dir);
+}
+
+/// macOS libghostty EP-001 US-001 - emit the `paneflow_ghostty` cfg.
+///
+/// The predicate means: *the native libghostty-vt backend is compiled and
+/// linked into this build*. It is true exactly when the target has a
+/// reviewed static archive under `native/libghostty/prebuilt/<triple>/`
+/// AND the matching Cargo feature is enabled.
+///
+/// Before this alias existed, that disjunction was written out in full at
+/// 170 sites across `src-app/src/terminal/`, in files up to 244 KB. Adding
+/// a platform meant editing every one of them, and a missed site fails
+/// either loudly (unresolved import) or silently (dead code, backend
+/// quietly absent). Emitting it once here makes adding a platform a
+/// three-line change, and keeps the platform list reviewable in one place.
+///
+/// Cross-platform note: this reads only `CARGO_CFG_*` / `CARGO_FEATURE_*`,
+/// which Cargo sets for the **target** being built, never the host. It is
+/// therefore correct under cross-compilation.
+///
+/// Adding macOS (EP-002/EP-003) is a single arm here plus the matching
+/// `libghostty-macos` feature - no source-site edits.
+///
+/// Divergence between this predicate and the crates actually linked is
+/// caught at compile time by the `compile_error!` guard in
+/// `src-app/src/terminal/mod.rs`. A target that Cargo *can* reach but that
+/// has no reviewed archive (e.g. `x86_64-pc-windows-gnu`) is rejected by
+/// `crates/paneflow-libghostty-sys/build.rs`, which hard-errors with the
+/// triple and a corrective action rather than falling back silently.
+fn emit_ghostty_backend_cfg() {
+    // Required so the `unexpected_cfgs` lint accepts `cfg(paneflow_ghostty)`
+    // in source without a blanket `#[allow]`.
+    println!("cargo:rustc-check-cfg=cfg(paneflow_ghostty)");
+
+    // Cargo re-runs the build script whenever the target triple or the
+    // feature set changes (both are part of the unit fingerprint), so no
+    // `rerun-if-env-changed` is needed for these.
+    let target_os = cargo_cfg("CARGO_CFG_TARGET_OS");
+    let target_arch = cargo_cfg("CARGO_CFG_TARGET_ARCH");
+    let target_env = cargo_cfg("CARGO_CFG_TARGET_ENV");
+
+    let linux =
+        std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_LINUX").is_some() && target_os == "linux";
+    // Apple Silicon only - no reviewed Intel artifact exists, and the wrapper
+    // crate declares the -sys dependency for aarch64 macOS alone.
+    let macos = std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_MACOS").is_some()
+        && target_os == "macos"
+        && target_arch == "aarch64";
+    let windows = std::env::var_os("CARGO_FEATURE_LIBGHOSTTY_WINDOWS").is_some()
+        && target_os == "windows"
+        && target_arch == "x86_64"
+        && target_env == "msvc";
+
+    if linux || macos || windows {
+        println!("cargo:rustc-cfg=paneflow_ghostty");
+    }
+}
+
+/// Read a `CARGO_CFG_*` variable that Cargo is guaranteed to set for every
+/// target.
+///
+/// Defaulting to an empty string here would be the worst possible failure
+/// mode: every arm of the predicate would silently evaluate to false and the
+/// Ghostty backend would vanish from the build with no diagnostic. Fail the
+/// build instead.
+///
+/// `CARGO_CFG_TARGET_ENV` is the one exception - it is legitimately the empty
+/// string on targets without an environment component (Darwin among them),
+/// but Cargo still *sets* it, so `var` succeeds and returns `""`.
+fn cargo_cfg(key: &str) -> String {
+    std::env::var(key)
+        .unwrap_or_else(|error| panic!("cargo always sets {key} for build scripts: {error}"))
 }
 
 /// Invoke a child `cargo build` against the workspace to produce the

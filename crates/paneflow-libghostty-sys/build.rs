@@ -10,6 +10,7 @@ type BuildResult<T> = Result<T, Box<dyn Error>>;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NativePlatform {
     Linux,
+    Macos,
     Windows,
 }
 
@@ -130,6 +131,20 @@ fn main() -> BuildResult<()> {
     let canonical_source = manifest_value(&manifest, "windows_canonical_source_path")?;
     let canonical_cache = format!("{canonical_source}/.paneflow-zig-cache");
     let canonical_prefix = format!("{canonical_source}/.paneflow-zig-output");
+    // macOS pins its deployment target in the Zig triple. Leaving it implicit
+    // would resolve it from the machine that produced the archive, so the
+    // expected value is composed from the manifest rather than hardcoded.
+    let macos_zig_target;
+    let zig_target = if spec.platform == NativePlatform::Macos {
+        macos_zig_target = format!(
+            "{}.{}",
+            spec.zig_target,
+            manifest_value(&manifest, "macos_deployment_target")?
+        );
+        macos_zig_target.as_str()
+    } else {
+        spec.zig_target
+    };
     let mut expected_info = vec![
         ("source_sha", manifest_value(&manifest, "source_sha")?),
         ("zig_version", manifest_value(&manifest, "zig_version")?),
@@ -139,7 +154,7 @@ fn main() -> BuildResult<()> {
             manifest_value(&manifest, "bindings_sha256")?,
         ),
         ("rust_target", target.as_str()),
-        ("zig_target", spec.zig_target),
+        ("zig_target", zig_target),
         ("optimize", manifest_value(&manifest, "build_mode")?),
         ("archive_normalization", normalization),
     ];
@@ -148,6 +163,17 @@ fn main() -> BuildResult<()> {
             "build_info_symbol",
             manifest_value(&manifest, "build_info_symbol")?,
         ));
+    } else if spec.platform == NativePlatform::Macos {
+        expected_info.extend([
+            (
+                "build_info_symbol",
+                manifest_value(&manifest, "build_info_symbol")?,
+            ),
+            (
+                "macos_deployment_target",
+                manifest_value(&manifest, "macos_deployment_target")?,
+            ),
+        ]);
     } else {
         expected_info.extend([
             (
@@ -242,22 +268,32 @@ fn main() -> BuildResult<()> {
         }
     }
 
-    let expected_archive_hash = manifest_value(&manifest, spec.archive_hash_key)?;
+    // The manifest hash is absent only while a platform has no reviewed
+    // archive yet (macOS, until US-003 records one from CI). That is tolerable
+    // for an explicitly selected PANEFLOW_LIBGHOSTTY_DIR, which is a developer
+    // opting into their own build, and never for a repository artifact.
+    let expected_archive_hash = manifest_value(&manifest, spec.archive_hash_key).ok();
     let prepared_archive_hash =
         artifact_info_value(&info, "archive_sha256", &build_info, &target, &action)?;
-    if (uses_bundled_archive || spec.platform == NativePlatform::Windows)
-        && prepared_archive_hash != expected_archive_hash
-    {
-        return Err(artifact_error(
-            &target,
-            &build_info,
-            format!(
-                "archive checksum metadata is `{prepared_archive_hash}`, expected `{expected_archive_hash}`"
-            ),
-            &action,
-        ));
-    }
-    let archive_hash = if uses_bundled_archive || spec.platform == NativePlatform::Windows {
+    let requires_manifest_hash = uses_bundled_archive || spec.platform == NativePlatform::Windows;
+    let archive_hash = if requires_manifest_hash {
+        let Some(expected_archive_hash) = expected_archive_hash else {
+            return Err(build_error(format!(
+                "libghostty manifest has no `{}`: no reviewed archive exists for {target} yet. \
+                 Corrective action: {action}",
+                spec.archive_hash_key
+            )));
+        };
+        if prepared_archive_hash != expected_archive_hash {
+            return Err(artifact_error(
+                &target,
+                &build_info,
+                format!(
+                    "archive checksum metadata is `{prepared_archive_hash}`, expected `{expected_archive_hash}`"
+                ),
+                &action,
+            ));
+        }
         expected_archive_hash
     } else {
         prepared_archive_hash
@@ -299,6 +335,18 @@ fn target_spec(target: &str) -> BuildResult<Option<TargetSpec>> {
             link_name: "ghostty-vt",
             system_libraries: &[],
         },
+        // Apple Silicon only. `zig_target` carries no OS version here: the
+        // deployment target is pinned in the manifest and appended below, so
+        // the builder's macOS version can never leak into the artifact.
+        "aarch64-apple-darwin" => TargetSpec {
+            platform: NativePlatform::Macos,
+            archive_path_key: "archive_path",
+            archive_hash_key: "archive_sha256_aarch64_apple_darwin",
+            normalization_key: "archive_normalization_macos",
+            zig_target: "aarch64-macos",
+            link_name: "ghostty-vt",
+            system_libraries: &[],
+        },
         "x86_64-pc-windows-msvc" => TargetSpec {
             platform: NativePlatform::Windows,
             archive_path_key: "archive_path_windows",
@@ -316,6 +364,14 @@ fn target_spec(target: &str) -> BuildResult<Option<TargetSpec>> {
         unsupported if unsupported.contains("-windows-") => {
             return Err(build_error(format!(
                 "libghostty has no reviewed static archive for Windows target {unsupported}"
+            )));
+        }
+        // Only reachable if someone forces the link feature on: the wrapper
+        // crate declares the -sys dependency for `aarch64` macOS alone, so an
+        // Intel Mac never gets here and keeps building Alacritty-only.
+        unsupported if unsupported.contains("-apple-") => {
+            return Err(build_error(format!(
+                "libghostty has no reviewed static archive for Apple target {unsupported}"
             )));
         }
         _ => return Ok(None),
@@ -546,6 +602,9 @@ fn corrective_action(platform: NativePlatform, target: &str) -> String {
     match platform {
         NativePlatform::Linux => format!(
             "restore native/libghostty/prebuilt/{target}, or run scripts/build-libghostty-linux.sh --target {target} and set PANEFLOW_LIBGHOSTTY_DIR to its output; Cargo performs no downloads"
+        ),
+        NativePlatform::Macos => format!(
+            "restore native/libghostty/prebuilt/{target}, or run scripts/build-libghostty-macos.sh --verify-reproducible and set PANEFLOW_LIBGHOSTTY_DIR to its output; Cargo performs no downloads"
         ),
         NativePlatform::Windows => format!(
             "restore native/libghostty/prebuilt/{target}, or run scripts/build-libghostty-windows.ps1 -VerifyReproducible; Cargo performs no downloads"

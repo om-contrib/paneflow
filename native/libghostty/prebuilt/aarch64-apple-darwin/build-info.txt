@@ -1,0 +1,11 @@
+source_sha=ae52f97dcac558735cfa916ea3965f247e5c6e9e
+zig_version=0.15.2
+header_sha256=4967e3edfc5802648c280246e7aac66f36a28d7c3739727c0d2e2cd85c9f4eee
+bindings_sha256=a1f0876e144e69889ed1d9a5501ee7e254afe674985c93c703d61cee49da81d0
+rust_target=aarch64-apple-darwin
+zig_target=aarch64-macos.13.0.0
+optimize=ReleaseFast
+archive_normalization=apple-strip-S+zig-ar-D
+macos_deployment_target=13.0.0
+archive_sha256=c489cd43aa82c26f11d6af1f6b49854f883161f6999f8111598d8f95e1b96ed0
+build_info_symbol=ghostty_build_info

@@ -13,12 +13,29 @@ categories.workspace = true
 readme = "../README.md"
 
 [features]
-default = ["libghostty-linux", "libghostty-windows"]
+# Source code never tests these features directly for backend availability.
+# `src-app/build.rs` (`emit_ghostty_backend_cfg`) folds "supported target AND
+# feature enabled" into the single `paneflow_ghostty` cfg, and every gate uses
+# that. Adding a platform means one arm there plus one feature here - not an
+# edit at ~170 call sites. Enforced by `tests/ghostty_cfg_policy.rs`.
+# (macOS libghostty EP-001 US-001.)
+default = ["libghostty-linux", "libghostty-macos", "libghostty-windows"]
 # Linux-only backend backed by the pinned libghostty-vt archive. It is the
 # standard backend for cargo run, development builds, and official releases.
 # The target-specific dependencies keep it inert on macOS/Windows.
 # Enabling it never clones or downloads from build.rs.
 libghostty-linux = [
+    "dep:paneflow-terminal-ghostty",
+    "dep:portable-pty",
+    "paneflow-terminal-ghostty/native",
+]
+# Apple Silicon backend backed by the pinned static archive and the Darwin PTY.
+# Enabled in standard builds so `terminal.backend = "ghostty"` can select it;
+# `auto` still resolves to Alacritty on macOS until the promotion story
+# (EP-006 US-017). Target-specific dependencies keep it inert on Linux,
+# Windows, and Intel macOS, and `--no-default-features` preserves an
+# Alacritty-only recovery build.
+libghostty-macos = [
     "dep:paneflow-terminal-ghostty",
     "dep:portable-pty",
     "paneflow-terminal-ghostty/native",
@@ -316,6 +333,14 @@ core-foundation = "0.10"
 raw-window-handle = "0.6"
 cocoa = "0.26"
 objc = "0.2"
+
+# The reviewed macOS Ghostty archive exists only for Apple Silicon. Pinning
+# these optional dependencies to that exact target lets `libghostty-macos`
+# stay enabled while an Intel Mac keeps compiling the Alacritty path - the
+# same shape as the Windows x64-MSVC entry below.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+paneflow-terminal-ghostty = { path = "../crates/paneflow-terminal-ghostty", optional = true }
+portable-pty = { version = "0.9.0", optional = true }
 
 # The verified Windows Ghostty archive exists only for x64 MSVC. Keeping these
 # optional dependencies on that exact target lets the default feature remain

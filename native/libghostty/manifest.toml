@@ -26,6 +26,20 @@ build_mode = "ReleaseFast"
 simd_profile = "upstream-default"
 archive_normalization = "elfutils-strip-debug+ar-D"
 archive_normalization_windows = "pinned-formatter-patch+fixed-source-cache-prefix+zig-build-seed0-j1+llvm-objcopy-strip-debug+coff-timestamp-zero+llvm-ar-D+ordinal-order"
+# Darwin has no elfutils and BSD `ar` has no deterministic `D` mode. `zig ar`
+# (llvm-ar) supplies `D`; `zig objcopy` cannot be used because it only handles
+# ELF, so Apple's `strip -S` does the debug removal. That mirrors Linux, which
+# also strips with a host tool (eu-strip). Stripping is required, not cosmetic:
+# Zig bakes absolute cache paths into the objects' debug data, so two builds
+# from different cache directories differ byte-for-byte without it.
+archive_normalization_macos = "apple-strip-S+zig-ar-D"
+# Pinned explicitly, never inherited from the build host. `-Dtarget=aarch64-macos`
+# resolves the OS version from the builder, which would leak it into the artifact
+# and, on a host newer than its SDK, breaks the link outright. An explicit version
+# also puts Zig in cross-compilation mode, where it uses its own bundled
+# libSystem stub instead of the Apple SDK. See
+# tasks/us-002-macos-zig-spike-findings.md.
+macos_deployment_target = "13.0.0"
 emit_mode = "lib-vt"
 archive_path = "lib/libghostty-vt.a"
 archive_path_windows = "lib/ghostty-vt-static.lib"
@@ -33,11 +47,23 @@ build_info_symbol = "ghostty_build_info"
 archive_sha256_x86_64_unknown_linux_gnu = "0d3e8fad7503658cb1fca3f1d78f2dc725dd3650264cebaa4ee30af9be619916"
 archive_sha256_aarch64_unknown_linux_gnu = "183c81ca54681587e79bceb4cee7751df35db7a0c3e55dd95a608d14b981fc87"
 archive_sha256_x86_64_pc_windows_msvc = "6f180d616cc0a68c7377e0be3cf51977c1415d9ca2f521b2be6c9ad2b7115467"
+# Re-derived on the CI runner and adopted from it, not from a developer
+# machine. The archive is cross-compiled, so the host SDK is not an input (no
+# -syslibroot is emitted), but the host `strip` is: a local build under a
+# different Xcode produced 31fcdfc6..., which is why the reviewed bytes come
+# from the lane rather than from a laptop.
+# .github/workflows/libghostty-macos.yml rebuilds and compares against this
+# key on every run, so drift fails loudly instead of shipping unverified.
+archive_sha256_aarch64_apple_darwin = "c489cd43aa82c26f11d6af1f6b49854f883161f6999f8111598d8f95e1b96ed0"
 build_info_sha256_x86_64_pc_windows_msvc = "c1c560374601542c17942d7f6c11850827a055b31285a80d0aad74ada5ce9415"
 headers_index_sha256_x86_64_pc_windows_msvc = "542ea4f2c120e57374576fbd44a5621c2a1e25bc120f55cf7549c49be2d1cdf4"
 symbols_sha256_x86_64_pc_windows_msvc = "df85b267f933bee8f1405c5245cfe87255fdca14a585c14132edf1acb89edc4e"
 linux_targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 windows_targets = ["x86_64-pc-windows-msvc"]
+# Apple Silicon only: releases ship no Intel macOS artifact, so an
+# x86_64-apple-darwin entry would double the archive and the CI matrix for
+# zero current users.
+macos_targets = ["aarch64-apple-darwin"]
 windows_source_date_epoch = "1779715909"
 windows_canonical_source_path = "C:/Users/Public/paneflow-libghostty-ae52f97d"
 windows_build_seed = "0"

@@ -1,0 +1,273 @@
+name: libghostty macOS
+
+# Native lane for the reviewed aarch64-apple-darwin libghostty-vt archive
+# (macOS libghostty EP-002). It rebuilds the artifact from the pinned Ghostty
+# source, proves the build is reproducible, and publishes the result plus its
+# metadata for review.
+#
+# A second, deliberately independent job then proves a standard checkout builds
+# and tests against that reviewed artifact with no Zig, no Ghostty source and
+# no network - which is what a contributor actually gets. The Linux and Windows
+# workflows keep owning their own targets.
+#
+# Runner note: this lane must stay on a runner image whose SDK still exports
+# the `arm64-macos` slice in usr/lib/libSystem.tbd. The macOS 26 SDK ships only
+# `arm64e-macos`, which Zig 0.15.2's Mach-O linker refuses to match, and Zig
+# compiles its own build runner against the host SDK before any project step.
+# macOS 15 images (Xcode 16.x, SDK 15.x) are known good. See
+# tasks/us-002-macos-zig-spike-findings.md before bumping the image.
+#
+# `run_tests.yml` pins macos-14 for cost reasons on a job that runs on every
+# PR. This lane is path-filtered and far rarer, so it takes the newer image to
+# stay closer to what users run - but it is the SDK slice, not the image
+# number, that actually constrains the choice, and the first step asserts it
+# rather than trusting the label.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/libghostty-macos.yml"
+      - "crates/paneflow-ghostty-smoke/**"
+      - "crates/paneflow-libghostty-sys/**"
+      - "crates/paneflow-terminal-ghostty/**"
+      - "native/libghostty/**"
+      - "scripts/*libghostty*"
+      - "src-app/Cargo.toml"
+      - "src-app/build.rs"
+      - "src-app/src/terminal/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/libghostty-macos.yml"
+      - "crates/paneflow-ghostty-smoke/**"
+      - "crates/paneflow-libghostty-sys/**"
+      - "crates/paneflow-terminal-ghostty/**"
+      - "native/libghostty/**"
+      - "scripts/*libghostty*"
+      - "src-app/Cargo.toml"
+      - "src-app/build.rs"
+      - "src-app/src/terminal/**"
+  schedule:
+    - cron: "37 1 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  GHOSTTY_SHA: ae52f97dcac558735cfa916ea3965f247e5c6e9e
+  ZIG_VERSION: 0.15.2
+  RUST_TARGET: aarch64-apple-darwin
+
+jobs:
+  native:
+    name: Reproducible native archive (aarch64-apple-darwin)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Checkout pinned Ghostty source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ghostty-org/ghostty
+          ref: ${{ env.GHOSTTY_SHA }}
+          path: .ghostty-source
+          fetch-depth: 1
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Record the toolchain this artifact is bound to
+        run: |
+          set -euo pipefail
+          echo "zig: $(zig version)"
+          echo "runner arch: $(uname -m)"
+          echo "xcode-select: $(xcode-select -p)"
+          echo "sdk: $(xcrun --show-sdk-path)"
+          echo "sdk version: $(xcrun --show-sdk-version)"
+          # The reviewed artifact must be produced by a native Apple Silicon
+          # build. An Intel image would still succeed - Zig would cross-compile
+          # to arm64 - but from a different toolchain path, so the bytes would
+          # not be comparable with what this lane is supposed to certify.
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "::error::runner is $(uname -m); this lane requires an Apple Silicon image"
+            exit 1
+          fi
+          # Load-bearing precondition, not decoration: without the arm64-macos
+          # slice Zig cannot link its own build runner and `zig build` fails
+          # before reaching any Ghostty step.
+          sdk_stub="$(xcrun --show-sdk-path)/usr/lib/libSystem.tbd"
+          if ! grep -q 'arm64-macos' "$sdk_stub"; then
+            echo "::error::$sdk_stub has no arm64-macos slice; Zig ${ZIG_VERSION} cannot link natively on this runner image. See tasks/us-002-macos-zig-spike-findings.md"
+            exit 1
+          fi
+
+      - name: Build the archive twice and prove it is reproducible
+        env:
+          PANEFLOW_GHOSTTY_SOURCE_DIR: ${{ github.workspace }}/.ghostty-source
+        run: |
+          scripts/build-libghostty-macos.sh \
+            --target "$RUST_TARGET" \
+            --verify-reproducible
+
+      - name: Attach provenance alongside the archive
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          cp .ghostty-source/build.zig.zon "$prepared/build.zig.zon"
+          shasum -a 256 "$prepared/build.zig.zon" > "$prepared/build.zig.zon.sha256"
+          cp native/libghostty/manifest.toml \
+             native/libghostty/THIRD_PARTY_NOTICES.md \
+             "$prepared/"
+
+      - name: Publish build metadata to the run summary
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          {
+            echo '## libghostty macOS native archive'
+            echo
+            echo 'Slice list, size and symbol inventory of the reviewed artifact.'
+            echo
+            echo '### build-info.txt'
+            echo '```'
+            cat "$prepared/build-info.txt"
+            echo '```'
+            echo
+            echo "- architecture: \`$(lipo -archs "$prepared/lib/libghostty-vt.a")\`"
+            echo "- size: $(wc -c < "$prepared/lib/libghostty-vt.a") bytes"
+            echo "- exported symbols: $(nm -g "$prepared/lib/libghostty-vt.a" | grep -cE '[[:space:]][A-TV-Z][[:space:]]_' || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Uploaded BEFORE the checksum gate, and with `if: always()`, on purpose.
+      # A checksum mismatch is precisely when the rebuilt archive is the thing
+      # you need in hand - to inspect it, or to adopt it as the reviewed one.
+      # Publishing after the gate meant the first real mismatch produced an
+      # error message and no artifact at all.
+      - name: Upload prepared native input
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: libghostty-native-aarch64-apple-darwin
+          path: target/libghostty/aarch64-apple-darwin
+          retention-days: 14
+
+      - name: Enforce the manifest checksum once it is recorded
+        run: |
+          set -euo pipefail
+          prepared="target/libghostty/$RUST_TARGET"
+          key="archive_sha256_aarch64_apple_darwin"
+          expected="$(sed -n "s/^${key} = \"\(.*\)\"$/\1/p" native/libghostty/manifest.toml)"
+          actual="$(sed -n 's/^archive_sha256=//p' "$prepared/build-info.txt")"
+          if [ -z "$expected" ]; then
+            echo "::notice::$key is not in the manifest yet (US-003). Rebuilt archive is $actual"
+            exit 0
+          fi
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::rebuilt archive is $actual but the manifest pins $expected"
+            exit 1
+          fi
+          echo "rebuilt archive matches the manifest: $actual"
+
+  consumer:
+    # Deliberately independent of `native`: this job must prove that a standard
+    # checkout builds against the reviewed repository artifact with no Zig, no
+    # Ghostty source and no network - exactly what a contributor gets.
+    name: Cargo gates against the repository artifact
+    runs-on: macos-15
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: "1.96.1"
+          components: rustfmt, clippy
+          targets: ${{ env.RUST_TARGET }}
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          prefix-key: v1-libghostty-macos
+          key: ${{ env.RUST_TARGET }}
+
+      - name: Format, lint and test with the default backend set
+        run: |
+          cargo fmt --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --locked
+
+      - name: Alacritty-only recovery build must stay green
+        run: cargo check -p paneflow-app --no-default-features --locked
+
+      - name: Headless package smoke
+        run: |
+          cargo run --release --locked -p paneflow-ghostty-smoke --features native
+
+      - name: Lifecycle and resource gates
+        # Slow campaigns (200 cycles, then 32 concurrent panes). Kept off the
+        # push path so ordinary commits stay fast, matching the Linux lane.
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          cargo test --locked -p paneflow-app \
+            ghostty_spawn_resize_close_stress_has_no_residual_growth \
+            -- --ignored --nocapture
+          cargo test --locked -p paneflow-app \
+            macos_ghostty_lifecycle_scenario_matrix_is_bounded \
+            -- --ignored --nocapture
+          cargo test --locked -p paneflow-app \
+            macos_ghostty_32_pane_resize_and_close_orders_are_bounded \
+            -- --ignored --nocapture
+
+      - name: Parser and snapshot performance gate
+        # Release-only, and pointedly not run on a developer machine: the
+        # comparison is against Alacritty on the same runner, so a loaded
+        # laptop would produce a number nobody should trust. Same trigger set
+        # as the lifecycle gates.
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          cargo test --release --locked -p paneflow-app \
+            ghostty_parser_and_snapshot_performance_gate \
+            -- --ignored --nocapture
+
+      - name: Confirm nothing links a Ghostty dylib
+        run: |
+          set -euo pipefail
+          binary="target/release/paneflow-ghostty-smoke"
+          otool -L "$binary"
+          # Drop the first line: otool echoes the binary path there, and that
+          # path itself contains "ghostty", so grepping the whole output would
+          # always match and fail this check for the wrong reason.
+          if otool -L "$binary" | tail -n +2 | grep -i 'ghostty'; then
+            echo "::error::$binary links a Ghostty dynamic library; the archive must be static"
+            exit 1
+          fi
+          echo "static link confirmed: no Ghostty dylib among the load commands"
+
+  validation-summary:
+    name: libghostty macOS validation
+    if: always()
+    needs: [native, consumer]
+    runs-on: macos-15
+    steps:
+      - name: Require every automated check
+        env:
+          NATIVE: ${{ needs.native.result }}
+          CONSUMER: ${{ needs.consumer.result }}
+        run: |
+          for result in "$NATIVE" "$CONSUMER"; do
+            [ "$result" = success ] || exit 1
+          done
+          echo "All automated libghostty macOS checks passed."

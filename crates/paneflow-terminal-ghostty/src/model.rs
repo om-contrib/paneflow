@@ -41,7 +41,7 @@ impl WindowSize {
         })
     }
 
-    #[cfg(all(feature = "native", any(target_os = "linux", target_os = "windows")))]
+    #[cfg(paneflow_ghostty_native)]
     pub(crate) fn validate(self) -> Result<Self> {
         if self.cols == 0 || self.rows == 0 {
             return Err(GhosttyError::InvalidDimensions {

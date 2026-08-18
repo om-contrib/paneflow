@@ -1,10 +1,18 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "windows",
+    all(target_os = "macos", target_arch = "aarch64")
+))]
 #[path = "../../../native/libghostty/bindings.rs"]
 mod bindings;
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "windows",
+    all(target_os = "macos", target_arch = "aarch64")
+))]
 pub use bindings::*;
 
 pub const EXPECTED_API_VERSION: &str = env!("PANEFLOW_GHOSTTY_API_VERSION");

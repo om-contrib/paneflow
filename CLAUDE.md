@@ -256,6 +256,13 @@ Stateful methods dispatch to GPUI main thread via `mpsc::channel`, polled every 
 Active PRDs in `tasks/`:
 - `prd-v2-gpui-terminal.md` - 19 stories, all delivered (US-001 through US-019)
 - `prd-v2-title-bar.md` - 12 stories, all delivered (US-001 through US-012)
+- `prd-linux-libghostty-backend-2026-Q3.md` + `prd-linux-libghostty-promotion-2026-Q3.md` - libghostty-vt on Linux, delivered and promoted to `auto`
+- `prd-windows-libghostty-backend-2026-Q3.md` - 18 stories, all delivered; libghostty-vt promoted to `auto` on Windows x64 MSVC
+- `prd-macos-libghostty-backend-2026-Q3.md` - 17 stories, IN_PROGRESS; brings macOS Apple Silicon onto libghostty-vt so all three platforms share one VT engine.
+  - **Qualification phase.** `libghostty-macos` is a default feature on `aarch64-apple-darwin` and the reviewed archive lives in `native/libghostty/prebuilt/aarch64-apple-darwin/`, but `auto` still resolves to Alacritty on macOS. Only `terminal.backend = "ghostty"` selects it. Promotion is US-017 and is gated on the CI quality gates.
+  - Intel Macs compile Alacritty-only: no reviewed `x86_64-apple-darwin` artifact exists, so every gate narrows macOS to `aarch64`.
+  - Backend availability is expressed by two build-script cfgs, never re-derived at a use site: `paneflow_ghostty` (`src-app/build.rs`) and `paneflow_ghostty_native` (`crates/paneflow-terminal-ghostty/build.rs`). `src-app/tests/ghostty_cfg_policy.rs` fails the build if anything copies the old disjunction back.
+  - Companion docs: `macos-libghostty-runbook.md` (backend selection, rollback, build diagnostics), `us-002-macos-zig-spike-findings.md` (why Zig 0.15.2 cannot build natively on a macOS 26+ SDK), `macos-libghostty-observations.md` (defects found in passing, out of this PRD's scope).
 
 Architecture decision: `tasks/audit-v2-options-final.md`
 Historical cmux reference spec: `CMUX_ANALYSIS.md` (417 lines, covers the Swift architecture that inspired some workspace ergonomics; Paneflow is an independent codebase, not a fork.)

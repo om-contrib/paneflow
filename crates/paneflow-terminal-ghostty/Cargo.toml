@@ -16,7 +16,12 @@ regex = "1"
 serde_json.workspace = true
 thiserror.workspace = true
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+# Decides whether the `-sys` crate exists for a target at all. Must stay in
+# sync with the `paneflow_ghostty_native` predicate in build.rs, which decides
+# whether the code that uses it is compiled. macOS is narrowed to aarch64: no
+# Intel artifact is shipped, and without the narrowing an Intel Mac would pull
+# in a `-sys` crate that has no reviewed archive to link.
+[target.'cfg(any(target_os = "linux", target_os = "windows", all(target_os = "macos", target_arch = "aarch64")))'.dependencies]
 paneflow-libghostty-sys = { path = "../paneflow-libghostty-sys", optional = true }
 
 [lints]
