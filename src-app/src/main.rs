@@ -339,14 +339,11 @@ impl StartupSplashView {
 
 fn native_backdrop_material_active(
     mode: paneflow_config::schema::AppMode,
-    settings_open: bool,
     terminal_material_active: bool,
     chrome_material_active: bool,
 ) -> bool {
     chrome_material_active
-        || (!settings_open
-            && matches!(mode, paneflow_config::schema::AppMode::Cli)
-            && terminal_material_active)
+        || (matches!(mode, paneflow_config::schema::AppMode::Cli) && terminal_material_active)
 }
 
 fn should_load_login_shell_env_for_startup(
@@ -408,38 +405,17 @@ mod native_material_tests {
 
     #[test]
     fn terminal_material_can_activate_backdrop_without_chrome_material() {
-        assert!(native_backdrop_material_active(
-            AppMode::Cli,
-            false,
-            true,
-            false
-        ));
+        assert!(native_backdrop_material_active(AppMode::Cli, true, false));
     }
 
     #[test]
-    fn terminal_material_only_applies_to_visible_cli_terminal() {
-        assert!(!native_backdrop_material_active(
-            AppMode::Cli,
-            true,
-            true,
-            false
-        ));
-        assert!(!native_backdrop_material_active(
-            AppMode::Diff,
-            false,
-            true,
-            false
-        ));
+    fn terminal_material_only_applies_to_cli_mode() {
+        assert!(!native_backdrop_material_active(AppMode::Diff, true, false));
     }
 
     #[test]
     fn chrome_material_activates_backdrop_independently() {
-        assert!(native_backdrop_material_active(
-            AppMode::Diff,
-            true,
-            false,
-            true
-        ));
+        assert!(native_backdrop_material_active(AppMode::Diff, false, true));
     }
 
     #[test]
@@ -1200,22 +1176,15 @@ pub static SWAP_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 
 impl PaneFlowApp {
     fn primary_sidebar_expanded_width(&self) -> f32 {
-        if self.settings_section.is_some() {
-            crate::settings::chrome::SETTINGS_NAV_WIDTH
-        } else {
-            match self.mode {
-                paneflow_config::schema::AppMode::Diff => {
-                    crate::app::diff_view_actions::DIFF_SIDEBAR_WIDTH
-                }
-                paneflow_config::schema::AppMode::Cli => SIDEBAR_WIDTH,
+        match self.mode {
+            paneflow_config::schema::AppMode::Diff => {
+                crate::app::diff_view_actions::DIFF_SIDEBAR_WIDTH
             }
+            paneflow_config::schema::AppMode::Cli => SIDEBAR_WIDTH,
         }
     }
 
     fn primary_sidebar_width_at(&self, now: std::time::Instant) -> f32 {
-        if self.settings_section.is_some() {
-            return crate::settings::chrome::SETTINGS_NAV_WIDTH;
-        }
         if let Some(animation) = self.primary_sidebar_animation {
             animation.width_at(now)
         } else if self.primary_sidebar_visible {
@@ -1226,11 +1195,6 @@ impl PaneFlowApp {
     }
 
     fn rendered_primary_sidebar_width(&mut self, window: &mut Window) -> f32 {
-        if self.settings_section.is_some() {
-            self.primary_sidebar_animation = None;
-            return crate::settings::chrome::SETTINGS_NAV_WIDTH;
-        }
-
         let now = std::time::Instant::now();
         if let Some(animation) = self.primary_sidebar_animation {
             if animation.is_finished(now) {
@@ -1251,12 +1215,6 @@ impl PaneFlowApp {
         let now = std::time::Instant::now();
         let from_width = self.primary_sidebar_width_at(now);
         self.primary_sidebar_visible = !self.primary_sidebar_visible;
-
-        if self.settings_section.is_some() {
-            self.primary_sidebar_animation = None;
-            cx.notify();
-            return;
-        }
 
         let to_width = if self.primary_sidebar_visible {
             self.primary_sidebar_expanded_width()
@@ -1403,7 +1361,6 @@ impl Render for PaneFlowApp {
         // a matching strip so content clears window controls.
         let title_bar_h =
             (1.75 * window.rem_size()).max(crate::app::constants::TITLE_BAR_MIN_HEIGHT);
-        let settings_open = self.settings_section.is_some();
         let sessions_sidebar_width = self.rendered_sessions_sidebar_width(window);
         let sessions_sidebar_mounted = self.agent_sessions.sessions_sidebar_open
             || self.agent_sessions.sessions_sidebar_animation.is_some();
@@ -1445,13 +1402,11 @@ impl Render for PaneFlowApp {
         let terminal_surface_mounted = self
             .active_workspace()
             .is_some_and(|ws| ws.active_tab().root.is_some());
-        let terminal_material_visible = !settings_open
-            && matches!(self.mode, paneflow_config::schema::AppMode::Cli)
+        let terminal_material_visible = matches!(self.mode, paneflow_config::schema::AppMode::Cli)
             && terminal_surface_mounted
             && terminal_material_active;
         let native_material_active = native_backdrop_material_active(
             self.mode,
-            settings_open,
             terminal_material_active,
             chrome_material_active,
         );
@@ -1470,16 +1425,12 @@ impl Render for PaneFlowApp {
             is_window_active,
             native_material_active,
         );
-        let panel_bg = if settings_open {
-            ui.base
-        } else {
-            match self.mode {
-                // CLI panes are self-contained cards carrying their own fill,
-                // so the panel behind them stays empty and lets the window
-                // shell read through the gutter between them.
-                paneflow_config::schema::AppMode::Cli => gpui::transparent_black(),
-                paneflow_config::schema::AppMode::Diff => ui.base,
-            }
+        let panel_bg = match self.mode {
+            // CLI panes are self-contained cards carrying their own fill,
+            // so the panel behind them stays empty and lets the window
+            // shell read through the gutter between them.
+            paneflow_config::schema::AppMode::Cli => gpui::transparent_black(),
+            paneflow_config::schema::AppMode::Diff => ui.base,
         };
         let panel_corner_mask_bg = crate::app::constants::cockpit_backdrop_background(
             shell_color,
@@ -1489,14 +1440,10 @@ impl Render for PaneFlowApp {
         let panel_top = title_bar_h;
         let primary_sidebar_width = self.rendered_primary_sidebar_width(window);
         let title_bar_rail_width = self.primary_sidebar_expanded_width();
-        let primary_sidebar_mounted = self.settings_section.is_some()
-            || self.primary_sidebar_visible
-            || self.primary_sidebar_animation.is_some();
-        let primary_sidebar_opacity = if self.settings_section.is_some() {
-            1.
-        } else {
-            (primary_sidebar_width / self.primary_sidebar_expanded_width().max(1.)).clamp(0., 1.)
-        };
+        let primary_sidebar_mounted =
+            self.primary_sidebar_visible || self.primary_sidebar_animation.is_some();
+        let primary_sidebar_opacity =
+            (primary_sidebar_width / self.primary_sidebar_expanded_width().max(1.)).clamp(0., 1.);
         // The primary rail is a flat region of the window shell: no inset
         // card, no border, no isolating mask. Native material therefore spans
         // the rail like any other chrome.
@@ -1566,13 +1513,7 @@ impl Render for PaneFlowApp {
             self.rename_focus_live = false;
         }
         self.prune_stale_split_palette(cx);
-        let main_content = if self.settings_section.is_some() {
-            // Embedded settings take precedence over the mode screen: the left
-            // rail becomes the settings nav (below) and this panel shows the
-            // active section body. Checked first so Settings opens correctly
-            // from Diff mode too.
-            self.render_settings_content_panel(cx).into_any_element()
-        } else if matches!(self.mode, paneflow_config::schema::AppMode::Diff) {
+        let main_content = if matches!(self.mode, paneflow_config::schema::AppMode::Diff) {
             // US-003 (prd-git-diff-mode-2026-Q3.md). NOTE: this site is
             // an `if matches!`, not a `match`, so the compiler does NOT
             // force a Diff arm - it must be added by hand or the diff
@@ -1692,13 +1633,7 @@ impl Render for PaneFlowApp {
         // pane header. A no-op in every other mode.
         let main_content = self.wrap_cli_diff_dock(main_content, main_panel_width, cx);
         // Update title bar with current workspace name.
-        let ws_name = if self.settings_section.is_some() {
-            // Settings open: the title-bar center is left empty (the section
-            // title lives in the content panel), matching the Codex reference.
-            None
-        } else {
-            self.active_workspace().map(|ws| ws.title.clone())
-        };
+        let ws_name = { self.active_workspace().map(|ws| ws.title.clone()) };
         // Update CTA state - extracted to `update_pill_info()` so the CLI
         // sidebar banner and the Diff title-bar pill share one source.
         let update_info = self.update_pill_info();
@@ -1879,26 +1814,7 @@ impl Render for PaneFlowApp {
                                 .bg(panel_corner_mask_bg),
                         )
                     })
-                    // While settings is open the left rail becomes the Codex
-                    // settings nav (kept visible even if the user had hidden the
-                    // primary rail, so the back button is always reachable).
                     .when(primary_sidebar_mounted, |row| {
-                        if self.settings_section.is_some() {
-                            return row.child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .h_full()
-                                    .w(px(primary_sidebar_width))
-                                    .flex_shrink_0()
-                                    .overflow_hidden()
-                                    // Clear the transparent title-bar overlay so the
-                                    // settings header sits below the floating controls.
-                                    .pt(title_bar_h)
-                                    .child(self.render_settings_nav(window, cx))
-                                    .into_any_element(),
-                            );
-                        }
                         row.child(match self.mode {
                             paneflow_config::schema::AppMode::Diff => div()
                                 .flex()
@@ -2165,6 +2081,13 @@ impl Render for PaneFlowApp {
                 self.fleet_search_focus.focus(window, cx);
             }
             app_content = app_content.child(self.render_fleet_search(cx));
+        }
+
+        // Settings are a modal over the untouched workspace, not a screen that
+        // replaces it - the pane grid and the left rail stay exactly where the
+        // user left them, so it is obvious what changed and how to get back.
+        if self.settings_section.is_some() {
+            app_content = app_content.child(self.render_settings_modal(window, cx));
         }
 
         if self.custom_buttons_modal.is_some() {

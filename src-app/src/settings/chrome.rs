@@ -38,8 +38,11 @@ pub(crate) const SETTINGS_NAV_WIDTH: f32 = crate::SIDEBAR_WIDTH;
 /// fill equal to the mask color would show no rounding at all. The nav rail
 /// stays transparent over the shared inset-card layer, using the same
 /// platform-aware material treatment as Agents / Review.
+/// Background shared by the settings nav rail and the section panel. Settings
+/// live in a modal card now, so both halves paint the card's own surface and
+/// the only separation between them is the rail's hairline right border.
 pub(crate) fn settings_chrome_bg() -> gpui::Hsla {
-    crate::theme::ui_colors().base
+    crate::theme::ui_colors().overlay
 }
 
 /// One selectable section row in the nav.
@@ -169,7 +172,6 @@ impl PaneFlowApp {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let ui = crate::theme::ui_colors();
-        let theme = crate::theme::active_theme();
         let active = self.settings_section.unwrap_or(SettingsSection::General);
         let query = self.settings_search_input.read(cx).value().to_lowercase();
         // One tint for both states: the open section rests on exactly the fill
@@ -298,17 +300,13 @@ impl PaneFlowApp {
             .flex_shrink_0()
             .flex()
             .flex_col()
-            // Same platform-aware rail treatment as the Agents / Review
-            // sidebars: optional native material on Windows, platform default
-            // on macOS, and a blur veil on Linux when the compositor advertises
-            // it. Keeps the settings rail visually identical to the other rails.
-            .bg(crate::app::constants::cockpit_chrome_background(
-                theme.title_bar_background,
-                window.is_window_active(),
-                self.cached_config.cockpit_chrome_material_enabled(),
-            ))
-            .child(self.render_settings_nav_header(ui, cx))
-            .child(div().mx(px(8.)).mt(px(4.)).child(search))
+            // Inside the modal card the rail is not window chrome any more, so
+            // it drops the platform material and simply shares the card's
+            // surface, split off by a hairline.
+            .bg(settings_chrome_bg())
+            .border_r_1()
+            .border_color(ui.border)
+            .child(div().mx(px(8.)).mt(px(8.)).child(search))
             .child(list)
     }
 
@@ -411,8 +409,6 @@ impl PaneFlowApp {
 
         div()
             .id("settings-panel")
-            .track_focus(&self.settings_focus)
-            .on_key_down(cx.listener(Self::handle_settings_key_down))
             .relative()
             .flex_1()
             .flex()

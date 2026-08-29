@@ -5,16 +5,16 @@
 //! - `chrome`     - the nav rail (`render_settings_nav`) + content panel
 //!   (`render_settings_content_panel`) + section dispatch, all on `PaneFlowApp`.
 //! - `components` - shared UI primitives (cards, toggles, section headers).
-//! - `nav_header` - fixed Settings title + close action for the nav rail.
+//! - `modal`      - the centered modal card that frames both halves.
 //! - `tabs`       - per-section bodies (`general`, `appearance`, `shortcuts`,
 //!   `terminal`, `ai_agent`, `mcp`), each `impl PaneFlowApp`.
 //!
 //! The Settings button (`PaneFlowApp::open_settings_window`, in `app::settings`)
-//! sets `settings_section = Some(General)`; `main.rs` then swaps the left rail
-//! for the nav and the content area for the panel. There is no standalone
-//! settings window anymore.
+//! sets `settings_section = Some(General)`; `main.rs` then layers
+//! `render_settings_modal` over the workspace, which is left untouched
+//! underneath. There is no standalone settings window anymore.
 
 pub mod chrome;
 pub mod components;
-mod nav_header;
+pub mod modal;
 pub mod tabs;
